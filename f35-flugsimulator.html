@@ -1262,12 +1262,12 @@ function readInput(dt) {
     P.thrCmd += clamp(tgt - P.thrCmd, -dt * 2.5, dt * 2.5);
   } else if (up) {
     let nx = P.thrCmd + dt * .5;
-    if (craft().heli || craft().prop) nx = Math.min(1, nx);
+    if (craft().heli || craft().prop || craft().peg) nx = Math.min(1, nx);
     else if (nx >= 1 && !P.abPass && !lv().auto) { nx = 1; if (!P.abHint) { P.abHint = true; toast('100 % Schub, 2 nochmals drücken für den Nachbrenner'); } }
     P.thrCmd = Math.min(1.1, nx);
   }
   if (dn && !(craft().heli && lv().auto)) P.thrCmd = Math.max(0, P.thrCmd - dt * .5);
-  if (pad && pad.thr) P.thrCmd = clamp(P.thrCmd + pad.thr * dt * .6, 0, craft().heli || craft().prop ? 1 : 1.1);
+  if (pad && pad.thr) P.thrCmd = clamp(P.thrCmd + pad.thr * dt * .6, 0, craft().heli || craft().prop || craft().peg ? 1 : 1.1);
   if (P.thrCmd < .999) P.abPass = false;
   P.brake = k('KeyB') || touch.brake || btnBrake || !!(pad && pad.brake);
   P.firing = k('Space') || touch.fire || !!(pad && pad.fire);
@@ -1281,7 +1281,8 @@ addEventListener('keydown', e => {
   switch (e.code) {
     case 'KeyG': if (mode === 'fly') toggleGear(); break;
     case 'KeyC': cycleCam(); break;
-    case 'KeyP': case 'Escape': togglePause(); break;
+    case 'KeyP': if (e.shiftKey) { togglePegasus(); break; } togglePause(); break;
+    case 'Escape': togglePause(); break;
     case 'KeyM': toggleSound(); break;
     case 'KeyI': invert = !invert; toast(invert ? 'Höhensteuer umgekehrt: ↓ hebt die Nase' : 'Höhensteuer normal: ↑ hebt die Nase'); break;
     case 'Digit2': case 'Numpad2': case 'KeyR': if (P.thrCmd >= .999) P.abPass = true; break;
@@ -1372,6 +1373,7 @@ function heliStep(dt) {
   P.maxKt = Math.max(P.maxKt, P.s * KT);
 }
 function step(dt) {
+  if (craft().peg) return pegStep(dt);
   if (craft().heli) return heliStep(dt);
   readInput(dt);
   P.thr += (P.thrCmd - P.thr) * Math.min(1, dt * (P.thrCmd > P.thr ? 1.2 : 2));
@@ -1481,7 +1483,7 @@ function telemetry() {
   const floor = Math.max(surfAt(P.pos.x, P.pos.z), 0);
   tel.agl = Math.max(0, P.pos.y - floor - GH) * FT;
   const w = tel.warn; w.length = 0;
-  if (!P.onGround && mode === 'fly') {
+  if (!P.onGround && mode === 'fly' && !craft().peg) {
     const sinkMs = -P.dir.y * P.s;
     if (P.s < P.vsEff * 1.12 || (P.L >= P.maxL * .98 && P.s < P.vsEff * 2)) w.push(['STALL', 'alarm']);
     const la = 6 * P.s, px = P.pos.x + P.dir.x * la, pz = P.pos.z + P.dir.z * la, py = P.pos.y + P.dir.y * la;
@@ -1564,6 +1566,7 @@ function updateModel(dt) {
   jet.gear.scale.y = Math.max(.001, e); jet.gear.visible = ga > .01;
   const ab = clamp((P.thr - 1) / .1, 0, 1), fl = 1 + (Math.random() - .5) * .16;
   for (const f of jet.flames) { f.visible = ab > .02; f.scale.set((.85 + ab * .2) * fl, (.85 + ab * .2) * fl, (.35 + ab * .75) * (1 + (Math.random() - .5) * .1)); }
+  if (jet.wings) animPegasus(jet, dt);
   if (jet.prop) jet.prop.rotation.z -= dt * (mode === 'crash' ? 0 : 10 + P.thr * 45);
   if (jet.tilt) { const tg = P.onGround ? Math.max(0, jet.tilt0 * (1 - P.s / ((craft().vs || 40) * .75)) - P.gp) : 0; jet.tilt.rotation.x += (tg - jet.tilt.rotation.x) * Math.min(1, dt * 4); }
   if (jet.rotor) { jet.rotor.rotation.y -= dt * (mode === 'crash' ? 0 : 13); jet.tailRotor.rotation.x += dt * (mode === 'crash' ? 0 : 40); }
@@ -1602,6 +1605,7 @@ function crash(why) {
   for (const b of bullets) { b.live = false; b.mesh.visible = false; }
   for (const m of missiles) scene.remove(m.mesh); missiles.length = 0; combat.lockTg = null;
   for (const b of bombs) scene.remove(b.mesh); bombs.length = 0;
+  for (const f of fireballs) scene.remove(f.sp); fireballs.length = 0;
   boom();
   showUI();
 }
@@ -1998,6 +2002,7 @@ function resetCombat() {
   for (const b of bullets) { b.live = false; b.mesh.visible = false; }
   for (const m of missiles) scene.remove(m.mesh); missiles.length = 0;
   for (const b of bombs) scene.remove(b.mesh); bombs.length = 0;
+  for (const f of fireballs) scene.remove(f.sp); fireballs.length = 0;
   Object.assign(combat, { bombs: craft().bombs || 0, msl: mslCap(), lockTg: null, lockT: 0, mslT: 0, mslHold: false, wasF: false, score: 0, kills: 0, coins: 0, ammo: AMMO_MAX, fireT: 0, hitT: 0, coinT: 0 });
   combat.prev.copy(P.pos);
   populateWorld();
@@ -2097,7 +2102,8 @@ function updateCombat(dt) {
   if (!P.firing) combat.mslHold = false;
   if (press && locked() && combat.mslT <= 0) { launchMissile(combat.lockTg); combat.mslHold = true; }
   updateMissiles(dt);
-  if (P.firing && !combat.mslHold && combat.fireT <= 0) {
+  if (craft().peg) { if (P.firing && combat.fireT <= 0) { combat.fireT = .3; spitFire(); } }
+  else if (P.firing && !combat.mslHold && combat.fireT <= 0) {
     if (combat.ammo > 0) { combat.fireT = 1 / craft().rate; combat.ammo--; fireBullet(); }
     else if (combat.fireT < -2) { combat.fireT = 0; toast('Keine Munition, auf der Piste landen und anhalten zum Nachladen'); }
   }
@@ -2423,6 +2429,7 @@ function setWorld(i) {
   world = i; HG = i ? HGT2 : HGT; apProf = null;
   alpsGroup.visible = i === 0; if (jungle.group) jungle.group.visible = i === 1;
   for (const b of bombs) scene.remove(b.mesh); bombs.length = 0;
+  for (const f of fireballs) scene.remove(f.sp); fireballs.length = 0;
   populateWorld();
 }
 function updatePortal(dt) {
@@ -2446,6 +2453,186 @@ function updatePortal(dt) {
   } else if (mode === 'fly' && portal.cool <= 0 && d < BH_R) { portal.phase = 'in'; portal.t = 0; boom(.6); }
 }
 
+// ---------- Pegasus (geheim, Shift+P): geflügeltes Pferd, Nase nach −z, Hufe auf Bodenhöhe −gh
+function buildPegasus() {
+  const g = new THREE.Group(), add = kit(g);
+  const white = new THREE.MeshStandardMaterial({ color: lin('#f5f2ea'), roughness: .5, metalness: 0 });
+  const feather = new THREE.MeshStandardMaterial({ color: lin('#fbf8f0'), roughness: .45, metalness: 0, side: THREE.DoubleSide });
+  const gold = new THREE.MeshStandardMaterial({ color: lin('#e7cf8a'), roughness: .45, metalness: .3, side: THREE.DoubleSide });
+  const dark = new THREE.MeshStandardMaterial({ color: lin('#2b2621'), roughness: .5 });
+  const sph = (rx, ry, rz) => { const s = new THREE.SphereGeometry(1, 20, 14); s.scale(rx, ry, rz); return s; };
+  // Rumpf mit Brust und Kruppe
+  add(sph(.5, .55, 1.2), white, 0, 0, 0);
+  add(sph(.48, .55, .55), white, 0, .05, -.75); add(sph(.5, .55, .55), white, 0, .08, .75);
+  // Hals und Kopf
+  const neck = new THREE.CylinderGeometry(.24, .38, 1.25, 14); neck.rotateX(-.75); add(neck, white, 0, .7, -1.35);
+  const head = new THREE.Group(); head.position.set(0, 1.25, -1.85); head.rotation.x = .55; g.add(head);
+  add(sph(.24, .27, .52), white, 0, 0, -.25, head); add(sph(.17, .17, .22), white, 0, -.07, -.68, head);
+  for (const sx of [-1, 1]) {
+    const ear = new THREE.ConeGeometry(.07, .26, 8); add(ear, white, sx * .12, .3, -.05, head).rotation.z = -sx * .2;
+    add(new THREE.SphereGeometry(.045, 8, 6), dark, sx * .2, .06, -.35, head);
+    add(new THREE.SphereGeometry(.03, 6, 4), dark, sx * .08, -.12, -.88, head);
+  }
+  // goldene Mähne entlang des Halses
+  const mane = new THREE.Group(); mane.position.set(0, .95, -1.45); mane.rotation.x = -.75; g.add(mane);
+  for (let i = 0; i < 7; i++) { const m = add(new THREE.BoxGeometry(.05, .3, .22), gold, 0, .28, -.55 + i * .17, mane); m.rotation.x = .3; }
+  // Schweif
+  const tail = new THREE.Group(); tail.position.set(0, .3, 1.25); g.add(tail);
+  const tg = new THREE.ConeGeometry(.2, 1.5, 10); tg.translate(0, -.75, 0); add(tg, gold, 0, 0, 0, tail).rotation.x = -2.3;
+  // Beine: Hüfte und Knie als Gelenke
+  const gear = new THREE.Group(); g.add(gear);
+  const legs = [];
+  for (const [sx, z] of [[-1, -.8], [1, -.8], [-1, .85], [1, .85]]) {
+    const hip = new THREE.Group(); hip.position.set(sx * .3, -.3, z); gear.add(hip);
+    add(new THREE.CylinderGeometry(.11, .14, .8, 10), white, 0, -.4, 0, hip);
+    const knee = new THREE.Group(); knee.position.y = -.8; hip.add(knee);
+    add(new THREE.CylinderGeometry(.07, .09, .7, 8), white, 0, -.35, 0, knee);
+    add(new THREE.CylinderGeometry(.1, .11, .12, 10), dark, 0, -.72, 0, knee);
+    legs.push({ hip, knee, front: z < 0, side: sx });
+  }
+  // Flügel: Innenteil am Widerrist, Aussenteil mit Schwungfedern
+  const wings = [];
+  for (const side of [-1, 1]) {
+    const root = new THREE.Group(); root.position.set(side * .32, .45, -.5); g.add(root);
+    add(plate([[0, -.45], [side * 1.9, -.6], [side * 2.05, .8], [side * .9, 1.25], [0, .9]], .06), feather, 0, 0, 0, root);
+    const outer = new THREE.Group(); outer.position.set(side * 1.95, 0, 0); root.add(outer);
+    add(plate([[0, -.6], [side * 1.4, -.45], [side * 2.3, .15], [side * 2.0, 1.0], [0, .8]], .05), feather, 0, 0, 0, outer);
+    for (let i = 0; i < 6; i++) {
+      const f = add(plate([[0, -.1], [side * 1.5, -.06], [side * 1.6, .08], [0, .1]], .03), i % 2 ? feather : gold, side * (1.0 + i * .2), -.01, .3 + i * .14, outer);
+      f.rotation.y = -side * (.25 + i * .14);
+    }
+    wings.push({ root, outer, side });
+  }
+  // leichter goldener Schimmer
+  const aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex(['rgba(255,236,170,.35)', 'rgba(255,220,140,.12)', 'rgba(255,220,140,0)']), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  aura.scale.set(9, 6, 1); g.add(aura);
+  const dummy = new THREE.Group(); g.add(dummy);
+  return { group: g, canopy: head, pilot: new THREE.Group(), gear, flames: [], flameMats: [], glowMat: new THREE.MeshBasicMaterial(), stabs: [new THREE.Group(), new THREE.Group()], strobe: dummy, wings, legs, tail, flapT: 0, mouth: new V3(0, 1.0, -2.6) };
+}
+
+// Pegasus-Flug: Blickrichtung ist Flugrichtung, Drehen fast auf der Stelle, Tempo mit 2 und 1
+function pegStep(dt) {
+  readInput(dt);
+  P.thr += (P.thrCmd - P.thr) * Math.min(1, dt * 2);
+  P.s += clamp(P.thr * 320 - P.s, -140 * dt, 100 * dt);
+  P.hp = clamp(P.hp + input.pitch * 2.2 * dt, -1.45, 1.45);
+  P.hdg = wrapA(P.hdg + (input.roll * 2.8 + input.yaw * 1.5) * dt);
+  P.hr += (input.roll * .75 - P.hr) * Math.min(1, dt * 4);
+  if (P.onGround) { P.hp = Math.max(P.hp, 0); P.hr *= 1 - Math.min(1, dt * 6); }
+  P.q.setFromEuler(eul.set(P.hp, -P.hdg, -P.hr, 'YXZ'));
+  fwd.set(0, 0, -1).applyQuaternion(P.q);
+  P.dir.copy(fwd); P.pos.addScaledVector(fwd, P.s * dt);
+  const floor = Math.max(surfAt(P.pos.x, P.pos.z), 0);
+  if (P.pos.y - GH <= floor) {
+    P.pos.y = floor + GH; if (P.hp < 0) P.hp = 0;
+    if (!P.onGround) { P.onGround = true; toast('Pegasus ist gelandet'); }
+    reloadIfParked();
+  } else if (P.onGround && P.pos.y - GH > floor + .3) P.onGround = false;
+  P.L = G0; P.aoa = 0; P.vsEff = 0; P.maxL = 1e9; P.gear = true; P.gearAnim = 1; P.pr = 0;
+  if (!P.onGround) P.airTime += dt;
+  P.maxKt = Math.max(P.maxKt, P.s * KT);
+}
+
+// Feuerbälle: fliegen zielsicher zum nächsten Feind im Bild und zerstören ihn sofort
+const fireballs = [];
+const fbMat = new THREE.SpriteMaterial({ map: fireTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false });
+const fbv = new V3();
+function pegTarget() {
+  let best = null, bd = 12000;
+  const look = (pos, ref, ship) => {
+    const d = pos.distanceTo(P.pos); if (d > bd || d < 30) return;
+    const v = fbv.copy(pos).project(camera); if (v.z > 1 || Math.abs(v.x) > 1 || Math.abs(v.y) > 1) return;
+    bd = d; best = { ref, ship, pos };
+  };
+  for (const t of targets) if (t.alive) look(t.pos, t, false);
+  if (world === 1) for (const sh of jungle.ships) if (sh.alive) look(new V3(sh.pos.x, sh.top * .5, sh.pos.z), sh, true);
+  return best;
+}
+function spitFire() {
+  const tg = pegTarget();
+  const sp = new THREE.Sprite(fbMat); sp.scale.set(7, 7, 1);
+  const pos = jet.mouth.clone().applyQuaternion(P.q).add(P.pos); sp.position.copy(pos); scene.add(sp);
+  fwd.set(0, 0, -1).applyQuaternion(P.q);
+  fireballs.push({ sp, pos, prev: pos.clone(), dir: fwd.clone(), spd: 1800 + P.s, tg, life: tg ? 12 : 3, trail: 0 });
+  boom(.12);
+}
+function updateFireballs(dt) {
+  for (let i = fireballs.length - 1; i >= 0; i--) {
+    const f = fireballs[i]; f.prev.copy(f.pos); f.life -= dt;
+    let tp = null;
+    if (f.tg) {
+      const r = f.tg.ref;
+      if (!r.alive) { f.tg = pegTarget(); if (f.tg) tp = f.tg.ship ? fbv.set(f.tg.ref.pos.x, f.tg.ref.top * .5, f.tg.ref.pos.z) : f.tg.ref.pos; } else tp = f.tg.ship ? fbv.set(r.pos.x, r.top * .5, r.pos.z) : r.pos;
+    }
+    if (tp) f.dir.subVectors(tp, f.pos).normalize();
+    f.pos.addScaledVector(f.dir, f.spd * dt); f.sp.position.copy(f.pos);
+    f.sp.scale.setScalar(6 + Math.sin(f.life * 30) * 1.2);
+    f.trail -= dt; if (f.trail <= 0) { f.trail = .025; puff(f.prev, true, .22); }
+    let dead = f.life <= 0;
+    if (!dead && tp && segDist2(f.prev, f.pos, tp) < (f.tg.ship ? 40 : f.tg.ref.r + 12) ** 2) {
+      if (f.tg.ship) damageShip(f.tg.ref, f.tg.ref.hp + 1, f.pos);
+      else { f.tg.ref.hp = 1; damage(f.tg.ref, f.tg.ref.pos); }
+      for (let j = 0; j < 16; j++) puff(f.pos, true, .6);
+      dead = true;
+    }
+    if (!dead && f.pos.y < Math.max(groundAt(f.pos.x, f.pos.z), 0)) { dead = true; for (let j = 0; j < 10; j++) puff(f.pos, true, .5); }
+    if (dead) { scene.remove(f.sp); fireballs.splice(i, 1); }
+  }
+}
+// Pferd animieren: Flügelschlag, Beine im Flug angezogen, am Boden stehen oder galoppieren
+function animPegasus(m, dt) {
+  const fly = !P.onGround;
+  m.flapT += dt * (fly ? 1.3 + P.thr * 1.6 + Math.max(0, P.hp) * 1.2 : 0);
+  const ph = m.flapT * Math.PI * 2, a = Math.sin(ph);
+  for (const w of m.wings) {
+    const tr = fly ? .2 + .6 * a : 1.25, to = fly ? .45 * Math.sin(ph - .8) : .5;
+    w.root.rotation.z += (w.side * tr - w.root.rotation.z) * Math.min(1, dt * (fly ? 30 : 4));
+    w.outer.rotation.z += (w.side * to - w.outer.rotation.z) * Math.min(1, dt * (fly ? 30 : 4));
+    w.root.rotation.y = fly ? 0 : -w.side * .5;
+  }
+  const gal = P.onGround && P.s > 3, gp = performance.now() / 1000 * (2 + P.s / 15) * Math.PI * 2;
+  for (const l of m.legs) {
+    let h = 0, k = 0;
+    if (fly) { h = l.front ? -1.0 : .9; k = l.front ? 1.6 : -.3; }
+    else if (gal) { const o = Math.sin(gp + (l.front ? 0 : Math.PI) + (l.side > 0 ? .5 : 0)); h = o * .6; k = Math.max(0, -o) * (l.front ? 1.2 : -.8); }
+    l.hip.rotation.x += (h - l.hip.rotation.x) * Math.min(1, dt * 8);
+    l.knee.rotation.x += (k - l.knee.rotation.x) * Math.min(1, dt * 8);
+  }
+  m.tail.rotation.z = Math.sin(performance.now() / 600) * .15; m.tail.rotation.x = fly ? .5 : 0;
+}
+let prevCraft = 'f35';
+function togglePegasus() {
+  if (mode !== 'fly' && mode !== 'brief') return;
+  const toPeg = craftId !== 'peg', from = craft();
+  if (toPeg) prevCraft = craftId;
+  craftId = toPeg ? 'peg' : prevCraft; jet = craft().model; VS = craft().vs || 62; GH = craft().gh; apProf = null;
+  for (const k in CRAFT) CRAFT[k].model.group.visible = k === craftId;
+  const c = craft();
+  fwd.set(0, 0, -1).applyQuaternion(P.q);
+  if (from.heli) { P.s = P.vel.length(); }
+  if (c.peg) {
+    P.hdg = Math.atan2(fwd.x, -fwd.z); P.hp = P.onGround ? 0 : Math.asin(clamp(fwd.y, -1, 1)); P.hr = 0;
+    P.thrCmd = P.thr = clamp(P.s / 320, 0, 1);
+  } else if (c.heli) {
+    P.vel.copy(fwd).multiplyScalar(Math.min(P.s, 70)); P.hp = P.hr = 0; P.hdg = Math.atan2(fwd.x, -fwd.z);
+    P.thrCmd = P.thr = lv().auto ? .5 : .63;
+  } else {
+    P.s = Math.min(P.s, (c.vs || 62) * 4); P.thrCmd = P.thr = Math.min(1, Math.max(P.thr, .7)); P.gp = 0; P.hdg = Math.atan2(fwd.x, -fwd.z);
+    P.gear = P.onGround; P.gearAnim = P.onGround ? 1 : 0; P.grace = 3;
+    if (!P.onGround && P.s < (c.vs || 62) * 1.3) P.s = (c.vs || 62) * 1.3;
+  }
+  if (P.onGround) P.pos.y = Math.max(surfAt(P.pos.x, P.pos.z), 0) + GH;
+  combat.msl = Math.min(combat.msl, mslCap()); combat.bombs = Math.min(combat.bombs, c.bombs || 0);
+  combat.lockTg = null;
+  if (mode === 'brief') showCraft();
+  toast(c.peg ? 'Pegasus! Leertaste spuckt Feuerbälle auf den nächsten Feind im Bild' : 'Zurück im ' + c.full);
+}
+
+CRAFT.peg = { short: 'Pegasus', tag: 'geheim', full: 'Pegasus', big: 'Pegasus', sub: 'Geflügeltes Pferd', model: buildPegasus(), peg: true, fixedGear: true, gh: 1.9, vs: 0, mil: 0, ab: 0, cd: 0, mach: 0, gmax: 20, roll: 0,
+  cock: [0, 1.75, -2.0], chase: [5, 14], gun: [0, 1, -2.6], msl: [0, 0, 0], mslMax: 0, rate: 3, bombs: 0,
+  spec: [['Abheben', 'aus dem Stand'], ['Wendekreis', 'fast null'], ['Höchstgeschw.', '620 kt'], ['Bewaffnung', 'Feuerbälle']],
+  lede: 'Das geflügelte Pferd: sehr schnell, wendet fast auf der Stelle und hebt aus dem Stand ab. Statt zu schiessen spuckt es Feuerbälle, die den nächsten Feind im Bild treffen.' };
+CRAFT.peg.model.group.visible = false; scene.add(CRAFT.peg.model.group);
 { const b = buildBlackHole(BH_R); b.group.position.copy(BH[0].pos); alpsGroup.add(b.group); BH[0].disk = b.disk; }
 
 // ---------- HUD
@@ -2546,6 +2733,7 @@ function drawHUD() {
   c.textAlign = 'center';
   const ab = P.thrCmd > 1.001;
   if (heli) { const k = P.thrCmd - .5; c.fillText(lv().auto ? (Math.abs(k) < .04 ? 'HÖHE HALTEN' : (k > 0 ? 'STEIGEN ' : 'SINKEN ') + Math.round(Math.abs(k - Math.sign(k) * .04) / .46 * 12) + ' M/S') : 'KOLLEKTIV ' + Math.round(P.thrCmd * 100) + ' %', cx, by - 13); }
+  else if (craft().peg) c.fillText('TEMPO ' + Math.round(P.thrCmd * 100) + ' %', cx, by - 13);
   else if (craft().prop) c.fillText('LEISTUNG ' + Math.round(P.thrCmd * 100) + ' %', cx, by - 13);
   else c.fillText(ab ? 'NACHBRENNER ' + Math.round((P.thrCmd - 1) / .1 * 100) + ' %' : 'SCHUB ' + Math.round(P.thrCmd * 100) + ' %', cx, by - 13);
   const st = [P.hook ? 'FANGSEIL' : '', heli || craft().fixedGear ? '' : P.gear ? (P.gearAnim > .98 ? 'FW UNTEN' : 'FW FÄHRT') : (P.gearAnim > .02 ? 'FW FÄHRT' : ''), P.brake ? 'BREMSE' : '', invert ? 'INV' : ''].filter(Boolean).join('   ');
@@ -2576,6 +2764,16 @@ function drawHUD() {
         c.fillRect(sx - 1.5, sy - 1.5, 3, 3); c.textAlign = 'center';
         c.fillText(hitShip ? 'TREFFER · V' : 'BOMBE', sx, sy + 24);
       }
+    }
+  }
+  if (craft().peg) {   // Pegasus: der nächste Feind im Bild ist das Ziel der Feuerbälle
+    const tg = pegTarget();
+    if (tg) {
+      const v = cv3.copy(tg.pos).project(camera), sx = (v.x + 1) / 2 * W, sy = (1 - v.y) / 2 * H, r = 26 + Math.sin(performance.now() / 120) * 3;
+      c.strokeStyle = c.fillStyle = '#ffc24a'; c.lineWidth = 2.5;
+      c.beginPath(); c.arc(sx, sy, r, 0, Math.PI * 2); c.stroke();
+      c.beginPath(); for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + .785; c.moveTo(sx + Math.cos(a) * (r + 4), sy + Math.sin(a) * (r + 4)); c.lineTo(sx + Math.cos(a) * (r + 14), sy + Math.sin(a) * (r + 14)); } c.stroke();
+      c.textAlign = 'center'; c.fillText('FEUERBALL · LEERTASTE', sx, sy - r - 14);
     }
   }
   c.strokeStyle = c.fillStyle = HUD_C; c.lineWidth = 1.5;
@@ -2706,7 +2904,7 @@ function drawRadar(c, small) {
   c.fillText('PUNKTE ' + fmt(combat.score), lx, ly0 + lh);
   c.fillText('ABSCHÜSSE ' + combat.kills + '  MÜNZEN ' + combat.coins, lx, ly0 + lh * 2);
   c.fillStyle = combat.ammo < 60 ? WARN_C.warn : HUD_C;
-  c.fillText('MUNITION ' + combat.ammo + (craft().mslMax ? '  RAKETEN ' + combat.msl : '') + (craft().bombs ? (craft().heli ? '  HELLFIRE ' : '  BOMBEN ') + combat.bombs : '') + (craft().smoke && smokeOn ? '  RAUCH' : ''), lx, ly0 + lh * 3);
+  if (craft().peg) c.fillText('FEUERBÄLLE ∞', lx, ly0 + lh * 3); else c.fillText('MUNITION ' + combat.ammo + (craft().mslMax ? '  RAKETEN ' + combat.msl : '') + (craft().bombs ? (craft().heli ? '  HELLFIRE ' : '  BOMBEN ') + combat.bombs : '') + (craft().smoke && smokeOn ? '  RAUCH' : ''), lx, ly0 + lh * 3);
 }
 
 // ---------- Ton
@@ -2737,7 +2935,9 @@ function updateAudio() {
   set(snd.osc.frequency, of); set(snd.bp.frequency, of); set(snd.gW.gain, .006 + th * .02);
   const hl = !!craft().heli;
   const pr = !!craft().prop;
-  set(snd.lfo.frequency, hl ? 16 + th * 6 : pr ? 28 + th * 40 : 0); set(snd.lfoG.gain, hl ? .32 : pr ? .22 : 0);
+  const pg = !!craft().peg;
+  set(snd.lfo.frequency, hl ? 16 + th * 6 : pr ? 28 + th * 40 : pg ? (P.onGround ? 0 : 1.3 + th * 1.6) : 0); set(snd.lfoG.gain, hl ? .32 : pr ? .22 : pg ? .4 : 0);
+  if (pg) set(snd.gW.gain, 0);
   set(snd.gA.gain, ab * 1.1); set(snd.gWd.gain, Math.min(.25, P.s / 1600) * (camMode === 1 ? .6 : 1));
 }
 function shot() {
@@ -2848,7 +3048,8 @@ function showCraft() {
   $('#kDn').textContent = heli ? (level === 1 ? 'Sinken' : 'Weniger Kollektiv') : 'Weniger Schub';
   $('#kYaw').textContent = heli ? 'Heck drehen' : 'Seitenruder';
   $('#kGear').hidden = heli || !!c.fixedGear; $('#kBrake').hidden = heli; $('#kSmoke').hidden = !c.smoke; $('#kBombL').textContent = heli ? 'Hellfire abfeuern' : 'Bombe abwerfen';
-  $('#startHint').innerHTML = heli
+  $('#startHint').innerHTML = c.peg ? '<b>Pegasus:</b> 2 macht schneller, 1 langsamer, ↑ ↓ heben und senken den Kopf, ← → wenden fast auf der Stelle. Aus dem Stand abheben: 2 und ↑. Die Leertaste spuckt Feuerbälle auf den nächsten Feind im Bild. Shift+P wechselt zurück.'
+    : heli
     ? '<b>Abheben:</b> 2 halten, bis der Apache steigt. ↑ neigt die Nase und fliegt vorwärts, ↓ bremst, ← → schieben seitwärts, Q E drehen auf der Stelle. In schneller Fahrt dreht das Heck von selbst in den Fahrtwind. <b>Landen:</b> abbremsen, langsam sinken und gerade aufsetzen.'
     : scen === 1 ? '<b>Start vom Träger:</b> 2 bis Vollschub halten, dann schiesst dich das Katapult über das Deck, am Bug hebst du ab. <b>Landung auf dem Träger:</b> von achtern (Süden) anfliegen, das Fangseil bremst dich, stehend wird nachgeladen. Bomben mit V, der Kreis im HUD zeigt den Aufschlagpunkt.'
     : c.prop ? '<b>Startablauf:</b> 2 gedrückt halten bis Vollgas. Ab etwa ' + Math.round(c.vs * KT * 1.12) + ' kt mit ↑ sanft ziehen, auf Leicht hebt das Flugzeug von selbst ab.' + (c.fixedGear ? '' : ' Das Fahrwerk fährt auf Leicht automatisch ein.') + ' Mit V klinkst du eine Bombe aus, der Kreis im HUD zeigt den Aufschlagpunkt. <b>Landen:</b> Gas weg, flach anschweben, sanft aufsetzen, dann B zum Bremsen.'
@@ -2874,7 +3075,7 @@ document.querySelectorAll('#scens button').forEach(b => b.addEventListener('clic
 lvlEl.addEventListener('input', () => { level = clamp(+lvlEl.value | 0, 1, 3); try { localStorage.setItem('f35level', level); } catch (e) {} showCraft(); });
 lvlEl.addEventListener('change', () => lvlEl.blur());
 showCraft();
-window.__f35 = { selectScen, setWorld, jungle, bombs, BH, portal, dropBomb, get world() { return world; }, selectCraft, groundAt, P, tel, combat, targets, missiles, sim(n, dt) { for (let i = 0; i < n; i++) { if (mode === 'fly') { step(dt); if (mode === 'fly') { updateCombat(dt); updateBombs(dt); } } updateShips(dt); updatePortal(dt); } telemetry(); return mode; } };
+window.__f35 = { get fireballs() { return fireballs; }, selectScen, setWorld, jungle, bombs, BH, portal, dropBomb, get world() { return world; }, selectCraft, groundAt, P, tel, combat, targets, missiles, sim(n, dt) { for (let i = 0; i < n; i++) { if (mode === 'fly') { step(dt); if (mode === 'fly') { updateCombat(dt); updateBombs(dt); updateFireballs(dt); } } updateShips(dt); updatePortal(dt); } telemetry(); return mode; } };
 tap('#goRwy', () => begin(false)); tap('#goAir', () => begin(true)); tap('#goResume', resume);
 tap('#reRwy', () => begin(false)); tap('#reAir', () => begin(true));
 tap('#laRwy', () => begin(false)); tap('#laAir', () => begin(true));
@@ -2923,7 +3124,7 @@ function frame(now) {
   if (mode === 'fly') {
     const n = Math.max(1, Math.ceil(dt / (1 / 120)));
     for (let i = 0; i < n && mode === 'fly'; i++) step(dt / n);
-    if (mode === 'fly') { updateCombat(dt); updateBombs(dt); }
+    if (mode === 'fly') { updateCombat(dt); updateBombs(dt); updateFireballs(dt); }
   } else if (mode === 'auto') { const n = apWarp(); for (let i = 0; i < n && mode === 'auto'; i++) autoStep(dt); }
   else if (mode === 'landed') egressUpdate(dt);
   updateShips(dt); updatePortal(dt);
