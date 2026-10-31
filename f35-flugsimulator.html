@@ -144,6 +144,7 @@ kbd{font:600 11px/1 var(--f-mono);color:var(--ink);border:1px solid rgba(230,239
       <div><span id="kYaw">Seitenruder</span><span><kbd>Q</kbd><kbd>E</kbd></span></div>
       <div><span>Kamera wechseln</span><span><kbd>C</kbd></span></div>
       <div><span>Höhensteuer umkehren</span><span><kbd>I</kbd></span></div>
+      <div><span>Munition auffüllen</span><span><kbd>⇧M</kbd><kbd>N</kbd></span></div>
       <div id="kBomb"><span id="kBombL">Bombe abwerfen</span><span><kbd>V</kbd></span></div>
       <div id="kSmoke" hidden><span>Rauch an / aus</span><span><kbd>X</kbd></span></div>
     </div>
@@ -1279,12 +1280,14 @@ addEventListener('keydown', e => {
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'PageUp', 'PageDown'].includes(e.code)) e.preventDefault();
   keys.add(e.code);
   if (e.repeat) return;
+  if (e.shiftKey && e.code !== 'KeyM' && (e.key === 'M' || e.key === 'm')) { refillAmmo(); return; }
   switch (e.code) {
     case 'KeyG': if (mode === 'fly') toggleGear(); break;
     case 'KeyC': cycleCam(); break;
     case 'KeyP': if (e.shiftKey) { togglePegasus(); break; } togglePause(); break;
     case 'Escape': togglePause(); break;
-    case 'KeyM': if (e.shiftKey) { if (mode === 'fly') { combat.ammo = AMMO_MAX; combat.msl = mslCap(); combat.bombs = craft().bombs || 0; toast('Munition aufgefüllt' + (combat.msl ? ', ' + combat.msl + ' Raketen' : '') + (combat.bombs ? ', ' + combat.bombs + (craft().heli ? ' Hellfire' : ' Bomben') : '')); } break; } toggleSound(); break;
+    case 'KeyM': if (e.shiftKey) { refillAmmo(); break; } toggleSound(); break;
+    case 'KeyN': refillAmmo(); break;
     case 'KeyI': invert = !invert; toast(invert ? 'Höhensteuer umgekehrt: ↓ hebt die Nase' : 'Höhensteuer normal: ↑ hebt die Nase'); break;
     case 'Digit2': case 'Numpad2': case 'KeyR': if (P.thrCmd >= .999) P.abPass = true; break;
     case 'KeyL': if (e.shiftKey) startAutoland(); break;
@@ -2199,12 +2202,17 @@ function jungleH(x, z) {
 }
 // Schwarze Löcher: Alpen (0) und Dschungelküste (1) führen in die Nachtwelt (2), dort führt je eines zurück
 const WORLD_NAMES = ['Alpen', 'Dschungelküste', 'Nacht'];
+// Farbe des Halos nach Ziel: blau Alpen, grün Dschungelküste, violett Nacht
+const BH_TINT = ['#9fd4ff', '#8dffb0', '#d6a8ff'];
 const BH = [
-  { world: 0, to: 2, pos: new V3(1200, 1500, 6000) },
-  { world: 1, to: 2, pos: new V3(2500, 1500, 9000) },
-  { world: 2, to: 0, pos: new V3(-2500, 1600, 6500), tint: '#9fd4ff' },
-  { world: 2, to: 1, pos: new V3(4500, 1600, 6500), tint: '#8dffb0' }
+  { world: 0, to: 1, pos: new V3(1200, 1500, 6000) },
+  { world: 1, to: 0, pos: new V3(2500, 1500, 9000) },
+  { world: 2, to: 0, pos: new V3(-2500, 1600, 6500) },
+  { world: 2, to: 1, pos: new V3(4500, 1600, 6500) },
+  { world: 0, to: 2, pos: new V3(-2600, 1700, 8000) },
+  { world: 1, to: 2, pos: new V3(6500, 1700, 8000) }
 ];
+for (const b of BH) b.tint = BH_TINT[b.to];
 const BH_R = 200;
 let world = 0;
 const jungle = { group: null, ships: [], built: false };
@@ -2313,7 +2321,7 @@ function buildJungle() {
     placeShip(sh, 0); jungle.ships.push(sh);
   }
   jungle.group = grp; jungle.built = true;
-  makePortal(BH[1]); grp.add(BH[1].group);
+  for (const b of BH) if (b.world === 1) { makePortal(b); grp.add(b.group); }
 }
 const groundAt2 = (x, z) => { const keep = HG; HG = HGT2; const h = groundAt(x, z); HG = keep; return h; };
 const slope2 = (x, z) => Math.abs(groundAt2(x + 15, z) - groundAt2(x - 15, z)) + Math.abs(groundAt2(x, z + 15) - groundAt2(x, z - 15));
@@ -2503,7 +2511,7 @@ function updatePortal(dt) {
       if (craft().heli) P.vel.copy(keepDir).multiplyScalar(Math.max(P.vel.length(), 30));
       camQ.copy(craft().heli ? camQ : P.q);
       portal.phase = 'out'; portal.t = 0; portal.cool = 5;
-      toast(world === 1 ? 'Willkommen an der Dschungelküste: Flugzeugträger und Schlachtschiffe im Osten' : world === 2 ? 'Nachtwelt: Lichterstadt an der Bucht. Flieg unter den Brücken durch! Blaues Loch: Alpen, grünes: Dschungelküste' : 'Zurück in den Alpen');
+      toast(world === 1 ? 'Willkommen an der Dschungelküste: Flotte im Osten. Blaues Loch: Alpen, violettes: Nacht' : world === 2 ? 'Nachtwelt: Lichterstadt an der Bucht. Flieg unter den Brücken durch! Blaues Loch: Alpen, grünes: Dschungelküste' : 'Alpen. Grünes Loch: Dschungelküste, violettes: Nacht');
     }
   } else if (portal.phase === 'out') {
     portal.t += dt; fadeEl.style.opacity = Math.max(0, 1 - portal.t / .9);
@@ -3003,7 +3011,7 @@ function makePortal(b) {
   if (b.tint) h.group.children[2].material.color.set(b.tint);
   scene.add(h.group); h.group.visible = b.world === 1 || b.world === world;
 }
-makePortal(BH[0]); makePortal(BH[2]); makePortal(BH[3]);
+for (const b of BH) if (b.world !== 1) makePortal(b);
 NIGHT.build();
 
 // ---------- HUD
@@ -3393,6 +3401,12 @@ function togglePause() {
   else if (mode === 'brief' && canResume) resume();
 }
 function cycleCam() { camMode = (camMode + 1) % 3; showUI(); if (mode === 'fly') toast('Kamera: ' + camNames[camMode] + (camMode === 2 ? ', mit der Maus ziehen zum Drehen' : '')); }
+function refillAmmo() {
+  if (mode !== 'fly') return toast('Nachladen geht im Flug: Shift+M oder N');
+  combat.ammo = AMMO_MAX; combat.msl = mslCap(); combat.bombs = craft().bombs || 0;
+  toast(craft().peg ? 'Pegasus braucht keine Munition' : 'Munition aufgefüllt: ' + AMMO_MAX + ' Schuss' + (combat.msl ? ', ' + combat.msl + ' Raketen' : '') + (combat.bombs ? ', ' + combat.bombs + (craft().heli ? ' Hellfire' : ' Bomben') : ''));
+  ding();
+}
 function toggleGear() {
   if (craft().heli || craft().fixedGear) return toast('Dieses Fluggerät hat ein festes Fahrwerk');
   if (P.onGround) return toast('Am Boden bleibt das Fahrwerk unten');
@@ -3413,7 +3427,7 @@ function showCraft() {
   $('#goRwy').textContent = scen === 1 ? 'Vom Flugzeugträger starten' : 'Von der Piste starten';
   $('#reRwy').textContent = $('#laRwy').textContent = scen === 1 ? 'Neu vom Träger' : 'Neu von der Piste';
   $('#bigName').textContent = c.big; $('#subName').textContent = c.sub;
-  $('#lede').textContent = c.lede + ' Schiess gegnerische Jets und Sperrballone ab und sammle die Goldmünzen.' + (c.mslMax ? ' Ist ein Jet erfasst (rote Raute, «Rakete bereit»), feuert die Leertaste eine wärmesuchende Rakete, sonst die Kanone.' : ' Die Leertaste feuert die Maschinengewehre.') + ' Nachladen am Boden bei der Piste. Das schwarze Loch südlich der Piste und jenes an der Dschungelküste führen in die Nachtwelt, eine Lichterstadt an einer Meeresbucht mit beleuchteten Schiffen und Brücken, unter denen du durchfliegen kannst. Von dort geht es durch das blaue Loch in die Alpen und durch das grüne an die Dschungelküste mit Flugzeugträger und Schlachtschiffen, die du bombardieren kannst (V). Shift+M füllt die Munition in der Luft auf. Bomben, die ins Meer fallen, laufen als Torpedo weiter und steuern das nächste Schiff voraus an.';
+  $('#lede').textContent = c.lede + ' Schiess gegnerische Jets und Sperrballone ab und sammle die Goldmünzen.' + (c.mslMax ? ' Ist ein Jet erfasst (rote Raute, «Rakete bereit»), feuert die Leertaste eine wärmesuchende Rakete, sonst die Kanone.' : ' Die Leertaste feuert die Maschinengewehre.') + ' Nachladen am Boden bei der Piste. In jeder Welt stehen zwei schwarze Löcher, die Farbe des Rings zeigt das Ziel: blau führt in die Alpen, grün an die Dschungelküste mit Flugzeugträger und Schlachtschiffen, die du bombardieren kannst (V), violett in die Nachtwelt, eine Lichterstadt an einer Meeresbucht mit Brücken, unter denen du durchfliegen kannst. Shift+M oder N füllt die Munition in der Luft auf. Bomben, die ins Meer fallen, laufen als Torpedo weiter und steuern das nächste Schiff voraus an.';
   $('#spec').innerHTML = c.spec.map(([a, b]) => '<div><dt>' + a + '</dt><dd>' + b + '</dd></div>').join('');
   $('#kPitch').textContent = heli ? 'Vorwärts / rückwärts' : 'Nase hoch / runter';
   $('#kRoll').textContent = heli ? 'Seitwärts neigen' : 'Rollen links / rechts';
