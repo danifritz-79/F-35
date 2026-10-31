@@ -59,8 +59,16 @@ kbd{font:600 11px/1 var(--f-mono);color:var(--ink);border:1px solid rgba(230,239
 .level{display:grid;grid-template-columns:auto minmax(0,1fr) 5.5em;align-items:center;gap:14px;font:600 11px/1.4 var(--f-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--hud)}
 .level input{width:100%;accent-color:var(--hud);cursor:pointer}
 .level output{font:600 20px/1 var(--f-display);letter-spacing:.06em;color:var(--ink);text-align:right}
+.crafts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.crafts button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0;padding:10px 12px;border-radius:3px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--ink);text-align:left}
+.crafts button b{font:800 20px/1 var(--f-display);letter-spacing:.03em;text-transform:uppercase}
+.crafts button span{font:600 10px/1.2 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.crafts button:hover{border-color:var(--hud-dim)}
+.crafts button[aria-checked="true"]{border-color:var(--hud);background:rgba(125,255,176,.12)}
+.crafts button[aria-checked="true"] b{color:var(--hud)}
+@media (max-width:560px){.crafts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .hint b{color:var(--ink);font-weight:500}
-#crashStats{margin:0;font:13px/1.7 var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+#crashStats,#landedStats{margin:0;font:13px/1.7 var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
 
 #toast{position:fixed;z-index:7;left:50%;bottom:calc(118px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:calc(100% - 32px);font:600 13px/1.4 var(--f-mono);letter-spacing:.04em;color:var(--hud);background:var(--panel);border:1px solid var(--line);padding:9px 14px;border-radius:3px;opacity:0;transition:opacity .25s;pointer-events:none;text-align:center}
 #toast.on{opacity:1}
@@ -110,26 +118,28 @@ kbd{font:600 11px/1 var(--f-mono);color:var(--ink);border:1px solid rgba(230,239
 
 <section id="brief" class="overlay" aria-labelledby="briefTitle">
   <div class="card">
-    <p class="eyebrow">F-35A Lightning II · Basis Alpenrand · Piste 36</p>
-    <h1 id="briefTitle"><span class="big">F-35</span><span class="sub">Flugsimulator</span></h1>
-    <p class="lede">Du stehst am Südende von Piste 36, Triebwerk im Leerlauf, Fahrwerk unten. Starte, schiess gegnerische Jets und Sperrballone ab und sammle die Goldmünzen in der Luft. Das Radar oben links zeigt die Piste (grün), Gegner (rot) und Münzen (gelb). Ist ein Jet erfasst (rote Raute, «Rakete bereit»), feuert die Leertaste eine wärmesuchende Rakete, sonst die Kanone. Zum Nachladen auf der Piste landen und anhalten.</p>
-    <dl class="spec">
-      <div><dt>Abheben</dt><dd>ca. 150 kt</dd></div>
-      <div><dt>Lastvielfaches</dt><dd>+9 / −3 g</dd></div>
-      <div><dt>Höchstgeschw.</dt><dd>Mach 1.5</dd></div>
-      <div><dt>Bewaffnung</dt><dd>Kanone + IR</dd></div>
-    </dl>
+    <p class="eyebrow" id="briefEyebrow">F-35A Lightning II · Basis Alpenrand · Piste 36</p>
+    <h1 id="briefTitle"><span class="big" id="bigName">F-35</span><span class="sub" id="subName">Flugsimulator</span></h1>
+    <div class="crafts" id="crafts" role="radiogroup" aria-label="Fluggerät wählen">
+      <button type="button" role="radio" data-craft="f35"><b>F-35A</b><span>Lightning II</span></button>
+      <button type="button" role="radio" data-craft="ah64"><b>AH-64</b><span>Apache</span></button>
+      <button type="button" role="radio" data-craft="f5"><b>F-5E</b><span>Tiger · PS</span></button>
+      <button type="button" role="radio" data-craft="mig35"><b>MiG-35</b><span>Fulcrum-F</span></button>
+    </div>
+    <p class="lede" id="lede"></p>
+    <dl class="spec" id="spec"></dl>
     <div class="keys">
-      <div><span>Nase hoch / runter</span><span><kbd>↑</kbd><kbd>↓</kbd></span></div>
-      <div><span>Rollen links / rechts</span><span><kbd>←</kbd><kbd>→</kbd></span></div>
-      <div><span>Mehr Schub</span><span><kbd>2</kbd></span></div>
-      <div><span>Weniger Schub</span><span><kbd>1</kbd></span></div>
+      <div><span id="kPitch">Nase hoch / runter</span><span><kbd>↑</kbd><kbd>↓</kbd></span></div>
+      <div><span id="kRoll">Rollen links / rechts</span><span><kbd>←</kbd><kbd>→</kbd></span></div>
+      <div><span id="kUp">Mehr Schub</span><span><kbd>2</kbd></span></div>
+      <div><span id="kDn">Weniger Schub</span><span><kbd>1</kbd></span></div>
       <div><span>Kanone / Rakete</span><span><kbd>Leertaste</kbd></span></div>
-      <div><span>Fahrwerk</span><span><kbd>G</kbd></span></div>
-      <div><span>Bremse (halten)</span><span><kbd>B</kbd></span></div>
-      <div><span>Seitenruder</span><span><kbd>Q</kbd><kbd>E</kbd></span></div>
+      <div id="kGear"><span>Fahrwerk</span><span><kbd>G</kbd></span></div>
+      <div id="kBrake"><span>Bremse (halten)</span><span><kbd>B</kbd></span></div>
+      <div><span id="kYaw">Seitenruder</span><span><kbd>Q</kbd><kbd>E</kbd></span></div>
       <div><span>Kamera wechseln</span><span><kbd>C</kbd></span></div>
       <div><span>Höhensteuer umkehren</span><span><kbd>I</kbd></span></div>
+      <div id="kSmoke" hidden><span>Rauch an / aus</span><span><kbd>X</kbd></span></div>
     </div>
     <p class="touchhint">Linker Kreis ist der Steuerknüppel: nach unten ziehen hebt die Nase, seitlich rollt das Flugzeug. Rechts der Schubhebel, das orange Feld oben ist der Nachbrenner. Der rote Knopf feuert die Kanone.</p>
     <div class="level"><label for="lvl">Level</label><input id="lvl" type="range" min="1" max="3" step="1" value="1"><output id="lvlOut" for="lvl">Leicht</output></div>
@@ -139,7 +149,7 @@ kbd{font:600 11px/1 var(--f-mono);color:var(--ink);border:1px solid rgba(230,239
       <button id="goRwy" type="button" class="primary">Von der Piste starten</button>
       <button id="goAir" type="button">In 5000 ft starten</button>
     </div>
-    <p class="hint"><b>Startablauf:</b> 2 gedrückt halten bis 100 % Schub, loslassen und nochmals 2 für den Nachbrenner (auf Leicht geht der Schub direkt durch). Ab etwa 140 kt mit ↑ sanft ziehen, auf Leicht hebt das Flugzeug von selbst ab. Fahrwerk mit G erst in der Luft einfahren. <b>Landen:</b> Fahrwerk raus, Schub reduzieren, sanft aufsetzen, dann B zum Bremsen. Gamepads werden erkannt.</p>
+    <p class="hint" id="startHint"></p>
   </div>
 </section>
 
@@ -151,6 +161,18 @@ kbd{font:600 11px/1 var(--f-mono);color:var(--ink);border:1px solid rgba(230,239
     <div class="actions">
       <button id="reRwy" type="button" class="primary">Neu von der Piste</button>
       <button id="reAir" type="button">Neu in 5000 ft</button>
+    </div>
+  </div>
+</section>
+
+<section id="landed" class="overlay" hidden aria-labelledby="landedTitle">
+  <div class="card">
+    <p class="eyebrow">Mission beendet · Piste 36</p>
+    <h2 id="landedTitle">Sicher gelandet</h2>
+    <p id="landedStats"></p>
+    <div class="actions">
+      <button id="laRwy" type="button" class="primary">Neu von der Piste</button>
+      <button id="laAir" type="button">Neu in 5000 ft</button>
     </div>
   </div>
 </section>
@@ -682,10 +704,235 @@ function buildF35() {
   const strobe = new THREE.Mesh(new THREE.SphereGeometry(.1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
   strobe.position.set(0, .62, 5.6); g.add(strobe);
 
-  return { group: g, canopy, pilot, gear, flame, flameMats, glowMat, stabs, strobe };
+  return { group: g, canopy, pilot, gear, flames: [flame], flameMats, glowMat, stabs, strobe };
 }
-const jet = buildF35();
-scene.add(jet.group);
+const F35M = buildF35();
+
+// ---------- Weitere Fluggeräte: F-5E Tiger II (Patrouille Suisse), MiG-35, AH-64 Apache
+// Alle Modelle: Nase nach −z, y oben, Ursprung in Rumpfmitte, Abstand Ursprung bis Boden = gh.
+function kit(g) {
+  return (geo, mat, x = 0, y = 0, z = 0, parent = g) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; parent.add(m); return m; };
+}
+function makeFlame(parent, x, y, z, r, len) {
+  const flame = new THREE.Group(); flame.position.set(x, y, z); parent.add(flame);
+  const fm = (c, o) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c), transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const cone = (rr, l, m) => { const g = new THREE.ConeGeometry(rr, l, 18, 1, true); g.translate(0, l / 2, 0); g.rotateX(Math.PI / 2); flame.add(new THREE.Mesh(g, m)); };
+  const mats = [fm('#ff7a2e', .5), fm('#ffd29a', .75)];
+  cone(r, len, mats[0]); cone(r * .58, len * .55, mats[1]);
+  for (let i = 0; i < 3; i++) { const d = new THREE.Mesh(new THREE.SphereGeometry(r * .42, 10, 6), fm('#ffe7c0', .55)); d.scale.set(1, 1, 1.8); d.position.z = r * 1.7 + i * r * 2; flame.add(d); mats.push(d.material); }
+  return { flame, mats };
+}
+function gearStrut(add, gear, mat, tire, x, z, r, top, gh) {
+  const cyw = -gh + r, len = top - cyw;
+  add(new THREE.CylinderGeometry(.06, .06, len, 8), mat, x, top - len / 2, z, gear);
+  add(new THREE.CylinderGeometry(r, r, .24, 16), tire, x, cyw, z, gear).rotation.z = Math.PI / 2;
+}
+function redStar() {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
+  const star = (R, col) => {
+    g.beginPath();
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? R * .4 : R; g.lineTo(64 + Math.cos(a) * rr, 64 + Math.sin(a) * rr); }
+    g.closePath(); g.fillStyle = col; g.fill();
+  };
+  star(62, '#c8202a'); star(54, '#ffffff'); star(46, '#c8202a');
+  const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; return t;
+}
+function navLights(g, span, z) {
+  const nav = (c, x) => { const m = new THREE.Mesh(new THREE.SphereGeometry(.08, 8, 6), new THREE.MeshBasicMaterial({ color: c })); m.position.set(x, 0, z); g.add(m); };
+  nav(0xff2a2a, -span); nav(0x2aff6a, span);
+  const strobe = new THREE.Mesh(new THREE.SphereGeometry(.1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  g.add(strobe); return strobe;
+}
+
+function buildF5() {
+  const g = new THREE.Group(), add = kit(g);
+  const red = new THREE.MeshStandardMaterial({ color: lin('#c3172b'), roughness: .38, metalness: .2 });
+  const white = new THREE.MeshStandardMaterial({ color: lin('#f3f1ec'), roughness: .4, metalness: .1 });
+  const dark = new THREE.MeshStandardMaterial({ color: lin('#2a2d31'), roughness: .45, metalness: .65, side: THREE.DoubleSide });
+  const tire = new THREE.MeshStandardMaterial({ color: lin('#161718'), roughness: .9 });
+  const glass = new THREE.MeshStandardMaterial({ color: lin('#7b93a3'), roughness: .05, metalness: .85, transparent: true, opacity: .8, envMapIntensity: 1.8 });
+  // schlanker Rumpf mit Haifischnase
+  add(loft([
+    [-7.3, .02, .02, .02, 2, -.1], [-6.6, .17, .16, .15, 2, -.06], [-5.6, .33, .3, .27, 2.1, 0], [-4.4, .48, .44, .36, 2.2, .04],
+    [-3.2, .58, .55, .44, 2.3, .06], [-2.0, .78, .55, .5, 2.6, .04], [-.6, .86, .52, .52, 2.8, .02], [1.2, .86, .5, .5, 2.8, 0],
+    [3.2, .8, .48, .48, 2.6, 0], [5.2, .74, .44, .44, 2.4, 0], [6.6, .7, .42, .42, 2.2, 0], [7.1, .66, .4, .4, 2, 0]
+  ], 26), red);
+  // weisse Rückenlinie und Seitenpfeile im Stil der Patrouille Suisse
+  add(new THREE.BoxGeometry(.18, .04, 9.5), white, 0, .55, 1.6);
+  for (const sx of [-1, 1]) { const s = add(new THREE.BoxGeometry(.04, .16, 6.2), white, sx * .86, .05, 1.6); s.rotation.x = .04; }
+  const cg = new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2); cg.scale(.42, .5, 1.55);
+  const canopy = add(cg, glass, 0, .52, -3.3); canopy.castShadow = false;
+  const pilot = add(new THREE.SphereGeometry(.17, 12, 8), dark, 0, .78, -3.45);
+  for (const sx of [-1, 1]) {
+    const box = add(new THREE.BoxGeometry(.36, .62, 2.4), red, sx * .82, .0, -1.4); box.rotation.y = sx * .05;
+    add(new THREE.BoxGeometry(.3, .52, .05), new THREE.MeshBasicMaterial({ color: 0x050607 }), sx * .84, 0, -2.62);
+  }
+  const wing = [[.6, -.7], [4.05, 2.15], [4.05, 2.75], [.6, 3.4]];
+  add(plate(wing, .1), red, 0, -.1, 0); add(plate(wing.map(([x, z]) => [-x, z]), .1), red, 0, -.1, 0);
+  // weisse Winkel auf den Flügeln
+  for (const sx of [-1, 1]) add(plate([[sx * 1.3, .25], [sx * 3.6, 2.15], [sx * 3.6, 2.45], [sx * 1.3, .65]], .02), white, 0, -.02, 0).castShadow = false;
+  // Sidewinder an den Flügelspitzen
+  for (const sx of [-1, 1]) { const m = new THREE.CylinderGeometry(.07, .07, 2.6, 8); m.rotateX(Math.PI / 2); add(m, white, sx * 4.15, -.05, 2.0); }
+  const stabs = [];
+  for (const sx of [-1, 1]) {
+    const piv = new THREE.Group(); piv.position.set(sx * .6, -.05, 5.6); g.add(piv);
+    add(plate([[0, -.8], [sx * 2.0, .5], [sx * 2.0, 1.0], [0, 1.2]], .07), red, 0, 0, 0, piv);
+    stabs.push(piv);
+  }
+  const s = new THREE.Shape(); [[3.4, 0], [5.9, 2.4], [6.8, 2.4], [7.0, 0]].forEach(([z, y], i) => i ? s.lineTo(z, y) : s.moveTo(z, y));
+  const tg = new THREE.ExtrudeGeometry(s, { depth: .1, bevelEnabled: true, bevelThickness: .03, bevelSize: .04, bevelSegments: 1 });
+  tg.translate(0, 0, -.05); tg.rotateY(-Math.PI / 2); add(tg, red, 0, .4, 0);
+  const cross = new THREE.MeshStandardMaterial({ map: swissRoundel(), roughness: .5, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  for (const sx of [-1, 1]) { const dg = new THREE.PlaneGeometry(.75, .75); dg.rotateY(sx * Math.PI / 2); add(dg, cross, sx * .09, 1.5, 5.8).castShadow = false; }
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x1a0a05 });
+  const flames = [], flameMats = [];
+  for (const sx of [-1, 1]) {
+    const noz = new THREE.CylinderGeometry(.29, .33, .7, 18, 1, true); noz.rotateX(Math.PI / 2); add(noz, dark, sx * .3, -.02, 7.25);
+    const gl = new THREE.Mesh(new THREE.CircleGeometry(.28, 18), glowMat); gl.position.set(sx * .3, -.02, 7.1); g.add(gl);
+    const f = makeFlame(g, sx * .3, -.02, 7.6, .27, 3.4); flames.push(f.flame); flameMats.push(...f.mats);
+  }
+  const gear = new THREE.Group(); g.add(gear);
+  gearStrut(add, gear, dark, tire, 0, -4.3, .24, -.35, 1.9);
+  gearStrut(add, gear, dark, tire, -1.15, 1.2, .33, -.35, 1.9); gearStrut(add, gear, dark, tire, 1.15, 1.2, .33, -.35, 1.9);
+  const strobe = navLights(g, 4.0, 2.6); strobe.position.set(0, 2.85, 6.6);
+  return { group: g, canopy, pilot, gear, flames, flameMats, glowMat, stabs, strobe, smokeAt: new V3(0, -.02, 7.8) };
+}
+
+function buildMig35() {
+  const g = new THREE.Group(), add = kit(g);
+  const skin = new THREE.MeshStandardMaterial({ color: lin('#8e9ba6'), roughness: .5, metalness: .3 });
+  const skin2 = new THREE.MeshStandardMaterial({ color: lin('#5f6e7b'), roughness: .5, metalness: .3 });
+  const radome = new THREE.MeshStandardMaterial({ color: lin('#c9cdc8'), roughness: .5, metalness: .1 });
+  const dark = new THREE.MeshStandardMaterial({ color: lin('#2a2d31'), roughness: .45, metalness: .65, side: THREE.DoubleSide });
+  const tire = new THREE.MeshStandardMaterial({ color: lin('#161718'), roughness: .9 });
+  const glass = new THREE.MeshStandardMaterial({ color: lin('#8ea4b4'), roughness: .05, metalness: .85, transparent: true, opacity: .8, envMapIntensity: 1.8 });
+  // Bugsektion mit leicht hängender Nase, dann flacher Mittelrumpf
+  add(loft([[-9.4, .02, .02, .02, 2, -.25], [-8.8, .25, .24, .24, 2, -.2], [-8.0, .45, .42, .4, 2, -.12]], 20), radome);
+  add(loft([
+    [-8.0, .45, .42, .4, 2, -.12], [-6.8, .62, .58, .5, 2.2, -.04], [-5.4, .74, .7, .55, 2.4, .04], [-4.0, .9, .74, .5, 2.6, .08],
+    [-2.6, 1.3, .66, .4, 3, .08], [-.8, 1.7, .5, .3, 3.4, .06], [1.5, 1.6, .45, .3, 3.4, .04], [4.0, 1.2, .4, .3, 3, .02], [6.6, .6, .3, .25, 2.4, 0], [7.4, .25, .2, .15, 2, 0]
+  ], 26), skin);
+  const cg = new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2); cg.scale(.46, .55, 1.6);
+  const canopy = add(cg, glass, 0, .74, -4.7); canopy.castShadow = false;
+  const pilot = add(new THREE.SphereGeometry(.18, 12, 8), dark, 0, 1.0, -4.9);
+  // zwei weit auseinander liegende Triebwerksgondeln unter dem Rumpf
+  for (const sx of [-1, 1]) {
+    add(loft([[-2.6, .62, .5, .55, 6, -.55], [-1.5, .7, .55, .6, 4, -.5], [2, .7, .55, .6, 3, -.45], [6, .62, .55, .55, 2.6, -.3], [7.9, .55, .5, .5, 2, -.2]].map(r => r), 20), skin2).position.x = sx * 1.25;
+    add(new THREE.BoxGeometry(1.15, .9, .05), new THREE.MeshBasicMaterial({ color: 0x050607 }), sx * 1.25, -.62, -2.62);
+  }
+  const wing = [[.9, -5.6], [1.9, -1.4], [6.0, 2.6], [6.0, 3.7], [1.9, 5.2]];
+  add(plate(wing, .12), skin, 0, -.08, 0); add(plate(wing.map(([x, z]) => [-x, z]), .12), skin, 0, -.08, 0);
+  const stabs = [];
+  for (const sx of [-1, 1]) {
+    const piv = new THREE.Group(); piv.position.set(sx * 1.9, -.2, 6.6); g.add(piv);
+    add(plate([[0, -1.6], [sx * 2.4, .3], [sx * 2.4, 1.0], [0, 1.2]], .08), skin, 0, 0, 0, piv);
+    stabs.push(piv);
+  }
+  const star = new THREE.MeshStandardMaterial({ map: redStar(), transparent: true, alphaTest: .4, roughness: .6, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  for (const sx of [-1, 1]) {
+    const piv = new THREE.Group(); piv.position.set(sx * 1.75, .3, 0); piv.rotation.z = -sx * .14; g.add(piv);
+    const s = new THREE.Shape(); [[3.3, 0], [5.6, 3.0], [6.6, 3.0], [7.3, 0]].forEach(([z, y], i) => i ? s.lineTo(z, y) : s.moveTo(z, y));
+    const tg = new THREE.ExtrudeGeometry(s, { depth: .1, bevelEnabled: true, bevelThickness: .03, bevelSize: .04, bevelSegments: 1 });
+    tg.translate(0, 0, -.05); tg.rotateY(-Math.PI / 2); add(tg, skin, 0, 0, 0, piv);
+    const dg = new THREE.PlaneGeometry(.95, .95); dg.rotateY(sx * Math.PI / 2); add(dg, star, sx * .09, 1.45, 5.9, piv).castShadow = false;
+    const wg = new THREE.PlaneGeometry(1.4, 1.4); wg.rotateX(-Math.PI / 2); add(wg, star, sx * 4.6, -.005, 2.6).castShadow = false;
+  }
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x1a0a05 });
+  const flames = [], flameMats = [];
+  for (const sx of [-1, 1]) {
+    const noz = new THREE.CylinderGeometry(.5, .56, 1.1, 22, 1, true); noz.rotateX(Math.PI / 2); add(noz, dark, sx * 1.25, -.2, 8.35);
+    const gl = new THREE.Mesh(new THREE.CircleGeometry(.5, 22), glowMat); gl.position.set(sx * 1.25, -.2, 8.0); g.add(gl);
+    const f = makeFlame(g, sx * 1.25, -.2, 8.9, .46, 5); flames.push(f.flame); flameMats.push(...f.mats);
+  }
+  const gear = new THREE.Group(); g.add(gear);
+  gearStrut(add, gear, dark, tire, 0, -6.0, .3, -.4, 2.35);
+  gearStrut(add, gear, dark, tire, -1.6, 1.2, .42, -.6, 2.35); gearStrut(add, gear, dark, tire, 1.6, 1.2, .42, -.6, 2.35);
+  const strobe = navLights(g, 6.0, 3.0); strobe.position.set(0, .5, 7.2);
+  return { group: g, canopy, pilot, gear, flames, flameMats, glowMat, stabs, strobe };
+}
+
+function buildApache() {
+  const g = new THREE.Group(), add = kit(g);
+  const olive = new THREE.MeshStandardMaterial({ color: lin('#4b5139'), roughness: .75, metalness: .15 });
+  const olive2 = new THREE.MeshStandardMaterial({ color: lin('#3c4130'), roughness: .75, metalness: .15 });
+  const dark = new THREE.MeshStandardMaterial({ color: lin('#26282a'), roughness: .5, metalness: .6, side: THREE.DoubleSide });
+  const tire = new THREE.MeshStandardMaterial({ color: lin('#161718'), roughness: .9 });
+  const glass = new THREE.MeshStandardMaterial({ color: lin('#5d7383'), roughness: .05, metalness: .8, transparent: true, opacity: .72, envMapIntensity: 1.6 });
+  // Rumpf mit Waffensensor-Nase, schmaler Heckausleger
+  add(loft([
+    [-6.4, .05, .05, .05, 2, -.1], [-6.1, .38, .4, .45, 2.2, -.1], [-5.3, .52, .55, .6, 2.6, -.05], [-3.8, .62, .9, .65, 3, 0],
+    [-1.6, .78, 1.05, .7, 3.2, 0], [.8, .8, 1.0, .65, 3.2, 0], [2.4, .55, .65, .4, 2.6, .25], [4.5, .3, .32, .26, 2.2, .45],
+    [7.6, .22, .25, .22, 2, .55], [8.6, .18, .5, .2, 2, .6]
+  ], 24), olive);
+  add(new THREE.SphereGeometry(.38, 14, 10), dark, 0, -.25, -6.3);   // TADS-Sensorkopf
+  // Tandem-Cockpit: Schütze vorne tiefer, Pilot hinten höher
+  const canopy = new THREE.Group(); g.add(canopy);
+  add(new THREE.BoxGeometry(1.0, .75, 1.5), glass, 0, .78, -4.6, canopy);
+  add(new THREE.BoxGeometry(1.05, .85, 1.6), glass, 0, 1.25, -3.05, canopy);
+  const pilot = new THREE.Group(); g.add(pilot);
+  add(new THREE.SphereGeometry(.17, 12, 8), dark, 0, .98, -4.6, pilot); add(new THREE.SphereGeometry(.17, 12, 8), dark, 0, 1.45, -3.0, pilot);
+  // Triebwerksgondeln und Stummelflügel mit Hellfire und Raketenbehältern
+  for (const sx of [-1, 1]) {
+    const n = new THREE.CylinderGeometry(.42, .38, 2.6, 16); n.rotateX(Math.PI / 2); add(n, olive2, sx * .95, .95, .4);
+    add(new THREE.CircleGeometry(.36, 16), dark, sx * .95, .95, 1.71);
+    add(plate([[sx * .7, -.6], [sx * 2.6, -.3], [sx * 2.6, .45], [sx * .7, .7]], .1), olive, 0, .1, 0);
+    const pod = new THREE.CylinderGeometry(.3, .3, 1.6, 12); pod.rotateX(Math.PI / 2); add(pod, olive2, sx * 1.4, -.35, .05);
+    for (const [hx, hy] of [[-.12, -.18], [.12, -.18], [-.12, -.42], [.12, -.42]]) { const h = new THREE.CylinderGeometry(.08, .08, 1.5, 8); h.rotateX(Math.PI / 2); add(h, dark, sx * 2.3 + hx, hy, .05); }
+  }
+  // Kettenkanone unter dem Bug
+  const gun = new THREE.CylinderGeometry(.06, .06, 1.6, 8); gun.rotateX(Math.PI / 2); add(gun, dark, 0, -.75, -4.6);
+  add(new THREE.BoxGeometry(.35, .3, .5), dark, 0, -.65, -3.8);
+  // Seitenleitwerk, Höhenleitwerk
+  const fs = new THREE.Shape(); [[7.4, 0], [8.4, 2.5], [9.2, 2.5], [8.9, 0]].forEach(([z, y], i) => i ? fs.lineTo(z, y) : fs.moveTo(z, y));
+  const fg = new THREE.ExtrudeGeometry(fs, { depth: .12, bevelEnabled: false }); fg.translate(0, 0, -.06); fg.rotateY(-Math.PI / 2); add(fg, olive, 0, .5, 0);
+  const stabs = [];
+  for (const sx of [-1, 1]) { const piv = new THREE.Group(); piv.position.set(0, .7, 8.7); g.add(piv); add(plate([[0, -.35], [sx * 1.7, -.2], [sx * 1.7, .35], [0, .4]], .06), olive, 0, 0, 0, piv); stabs.push(piv); }
+  // Hauptrotor: vier Blätter, dazu eine halbtransparente Scheibe für die Bewegungsunschärfe
+  const rotor = new THREE.Group(); rotor.position.set(0, 2.15, -.6); g.add(rotor);
+  add(new THREE.CylinderGeometry(.12, .16, .7, 10), dark, 0, 1.8, -.6);
+  add(new THREE.CylinderGeometry(.35, .35, .2, 12), dark, 0, 0, 0, rotor);
+  for (let i = 0; i < 4; i++) { const b = add(new THREE.BoxGeometry(7.3, .05, .5), dark, 0, 0, 0, rotor); b.geometry.translate(3.65, 0, 0); b.rotation.y = i * Math.PI / 2; b.castShadow = true; }
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(7.4, 40), new THREE.MeshBasicMaterial({ color: 0x1c1e20, transparent: true, opacity: .16, depthWrite: false, side: THREE.DoubleSide }));
+  disc.rotation.x = -Math.PI / 2; rotor.add(disc);
+  const tailRotor = new THREE.Group(); tailRotor.position.set(-.22, 2.2, 8.85); g.add(tailRotor);
+  for (let i = 0; i < 4; i++) { const b = add(new THREE.BoxGeometry(.04, 1.4, .2), dark, 0, 0, 0, tailRotor); b.geometry.translate(0, .7, 0); b.rotation.x = i * Math.PI / 2 + (i % 2) * .5; }
+  // festes Fahrwerk: zwei Haupträder vorne, Spornrad hinten
+  const gear = new THREE.Group(); g.add(gear);
+  for (const sx of [-1, 1]) {
+    add(new THREE.CylinderGeometry(.06, .06, 1.1, 8), dark, sx * .95, -.95, -2.4, gear).rotation.z = sx * .45;
+    add(new THREE.CylinderGeometry(.38, .38, .26, 16), tire, sx * 1.15, -1.22, -2.4, gear).rotation.z = Math.PI / 2;
+  }
+  add(new THREE.CylinderGeometry(.05, .05, 1.2, 8), dark, 0, -.4, 7.6, gear);
+  add(new THREE.CylinderGeometry(.2, .2, .14, 12), tire, 0, -1.4, 7.6, gear).rotation.z = Math.PI / 2;
+  const strobe = navLights(g, 2.7, .1); strobe.position.set(0, 2.9, 8.9);
+  return { group: g, canopy, pilot, gear, flames: [], flameMats: [], glowMat: new THREE.MeshBasicMaterial(), stabs, strobe, rotor, tailRotor, disc };
+}
+
+// Kenndaten pro Fluggerät: vs Abreissgeschwindigkeit m/s, mil/ab Schub in m/s² ohne und mit Nachbrenner,
+// cd Widerstandsbeiwert, mach Anstieg im Transschall, gmax Lastgrenze, roll Rollrate rad/s
+const CRAFT = {
+  f35: { short: 'F-35A', tag: 'Lightning II', full: 'F-35A Lightning II', big: 'F-35', sub: 'Flugsimulator', model: F35M, gh: 2.25, vs: 62, mil: 5.9, ab: 3.5, cd: 5.2e-5, mach: .55, gmax: 9, roll: 2.6,
+    cock: [0, 1.0, -4.62], chase: [4.4, 19], gun: [-.9, .55, -3.6], msl: [2.4, -1.1, -1], mslMax: 8, rate: 14,
+    spec: [['Abheben', 'ca. 140 kt'], ['Lastvielfaches', '+9 / −3 g'], ['Höchstgeschw.', 'Mach 1.5'], ['Bewaffnung', 'Kanone + IR']],
+    lede: 'Tarnkappenjet der Schweizer Luftwaffe. Du stehst am Südende von Piste 36, Triebwerk im Leerlauf, Fahrwerk unten.' },
+  ah64: { short: 'AH-64', tag: 'Apache', full: 'AH-64 Apache', big: 'Apache', sub: 'Kampfhubschrauber', model: buildApache(), heli: true, gh: 1.6, vs: 0, mil: 0, ab: 0, cd: 0, mach: 0, gmax: 3.5, roll: 0,
+    cock: [0, 1.02, -4.75], chase: [4.5, 21], gun: [0, -.8, -5.4], msl: [2.3, -.3, .05], mslMax: 4, rate: 10,
+    spec: [['Abheben', 'senkrecht'], ['Höchstgeschw.', '150 kt'], ['Gipfelhöhe', '6400 m'], ['Bewaffnung', '30 mm + Stinger']],
+    lede: 'Kampfhubschrauber mit Tandem-Cockpit. Du stehst auf Piste 36, der Rotor läuft. Mit 2 hebst du senkrecht ab, ↑ neigt die Nase und fliegt vorwärts.' },
+  f5: { short: 'F-5E', tag: 'Tiger · PS', full: 'F-5E Tiger II', big: 'Tiger', sub: 'Patrouille Suisse', model: buildF5(), gh: 1.9, vs: 58, mil: 4.6, ab: 2.8, cd: 6.0e-5, mach: .62, gmax: 7.3, roll: 3.4,
+    cock: [0, .9, -3.65], chase: [3.8, 16], gun: [-.3, .15, -5.6], msl: [4.15, -.05, 2], mslMax: 4, rate: 16, smoke: true,
+    spec: [['Abheben', 'ca. 130 kt'], ['Lastvielfaches', '+7.3 / −3 g'], ['Höchstgeschw.', 'Mach 1.6'], ['Bewaffnung', '2 Kanonen + IR']],
+    lede: 'Der rot-weisse Tiger der Patrouille Suisse: leicht, wendig, mit Rauchanlage für die Kunstflugfiguren (X).' },
+  mig35: { short: 'MiG-35', tag: 'Fulcrum-F', full: 'MiG-35 Fulcrum-F', big: 'MiG-35', sub: 'Flugsimulator', model: buildMig35(), gh: 2.35, vs: 60, mil: 6.6, ab: 4.8, cd: 4.6e-5, mach: .45, gmax: 9.5, roll: 3.0,
+    cock: [0, 1.12, -5.05], chase: [4.6, 21], gun: [-1.0, .4, -3.6], msl: [4.0, -.75, 1.5], mslMax: 8, rate: 15,
+    spec: [['Abheben', 'ca. 135 kt'], ['Lastvielfaches', '+9.5 / −3 g'], ['Höchstgeschw.', 'Mach 2.2'], ['Bewaffnung', 'Kanone + IR']],
+    lede: 'Die jüngste MiG: zweistrahlig, sehr schubstark und schnell. Du stehst am Südende von Piste 36, Triebwerke im Leerlauf.' }
+};
+let craftId = 'f35';
+try { const v = localStorage.getItem('f35craft'); if (v && CRAFT[v]) craftId = v; } catch (e) {}
+const craft = () => CRAFT[craftId];
+for (const k in CRAFT) { CRAFT[k].model.group.visible = k === craftId; scene.add(CRAFT[k].model.group); }
+let jet = craft().model;
 
 // ---------- Explosion
 const fireTex = radialTex(['rgba(255,245,215,1)', 'rgba(255,160,50,.95)', 'rgba(190,50,12,.55)', 'rgba(60,10,0,0)']);
@@ -707,9 +954,10 @@ function updateParts(dt) {
 }
 
 // ---------- Flugzustand
-const G0 = 9.81, VS = 62, GH = 2.25, KT = 1.94384, FT = 3.28084;
+const G0 = 9.81, KT = 1.94384, FT = 3.28084;
+let VS = craft().vs || 62, GH = craft().gh;
 const AX = new V3(1, 0, 0), AY = new V3(0, 1, 0), AZ = new V3(0, 0, 1);
-const P = { pos: new V3(), q: new Qt(), s: 0, thr: 0, thrCmd: 0, gear: true, gearAnim: 1, onGround: true, hdg: 0, gp: 0, pr: 0, rr: 0, yr: 0, L: G0, aoa: 0, maxL: G0, vsEff: VS, abPass: false, abHint: false, brake: false, maxG: 1, maxKt: 0, airTime: 0, dir: new V3(0, 0, -1) };
+const P = { pos: new V3(), q: new Qt(), s: 0, thr: 0, thrCmd: 0, gear: true, gearAnim: 1, onGround: true, hdg: 0, gp: 0, pr: 0, rr: 0, yr: 0, L: G0, aoa: 0, maxL: G0, vsEff: VS, abPass: false, abHint: false, brake: false, maxG: 1, maxKt: 0, airTime: 0, dir: new V3(0, 0, -1), vel: new V3(), hp: 0, hr: 0 };
 const tel = { pitch: 0, roll: 0, hdg: 0, kt: 0, ft: 0, mach: 0, G: 1, aoa: 0, vs: 0, agl: 0, warn: [] };
 const LV = [null,
   { name: 'Leicht', sink: 12, roll: 35, nose: -12, auto: true, jets: 4, msl: 8, lockR: 5000, lockC: 22, lockT: .5, mTurn: 2.6, hint: 'Startautomatik: ab etwa 135 kt hebt das Flugzeug von selbst ab, das Fahrwerk fährt automatisch ein und aus, die Landung verzeiht viel. 8 Raketen, weniger und friedlichere Gegner.' },
@@ -718,16 +966,28 @@ const LV = [null,
 let level = 1;
 try { const v = +localStorage.getItem('f35level'); if (v >= 1 && v <= 3) level = v; } catch (e) {}
 const lv = () => LV[level];
+const HELI_HINT = [null, 'Höhe halten automatisch: 2 steigen, 1 sinken, nichts drücken schwebt. Ohne Steuereingabe bremst der Apache von selbst ab. Robustes Aufsetzen.',
+  'Kollektiv direkt: etwa 62 % hält den Apache in der Schwebe. Aufsetzen bis 4 m/s Sinkrate.',
+  'Kollektiv direkt, empfindliches Fahrwerk: Aufsetzen bis 2.7 m/s Sinkrate, enge Zielerfassung.'];
+const mslCap = () => Math.min(lv().msl, craft().mslMax);
 let mode = 'brief', camMode = 0, invert = false, canResume = false, crashT = 0;
 const tq = new Qt(), invQ = new Qt(), dL = new V3(), fwd = new V3(), upv = new V3(), rgt = new V3(), eul = new THREE.Euler();
 
 function reset(air) {
   for (const p of parts) { scene.remove(p.sp); p.sp.material.dispose(); } parts.length = 0;
+  const heli = !!craft().heli;
   Object.assign(P, { s: air ? 205 : 0, thr: air ? .72 : 0, thrCmd: air ? .72 : 0, gear: !air, gearAnim: air ? 0 : 1, onGround: !air, hdg: 0, gp: 0, pr: 0, rr: 0, yr: 0, L: G0, aoa: 0, abPass: false, abHint: false, grace: 0, maxG: 1, maxKt: 0, airTime: 0 });
   P.q.identity();
   if (air) P.pos.set(0, 1525, 14000); else P.pos.set(0, RWY.h + GH, 1385);
-  P.dir.set(0, 0, -1);
+  P.dir.set(0, 0, -1); P.vel.set(0, 0, 0); P.hp = P.hr = 0;
+  if (heli) {
+    Object.assign(P, { s: air ? 40 : 0, gear: true, gearAnim: 1, thr: air ? (lv().auto ? .5 : .63) : 0 }); P.thrCmd = P.thr;
+    if (air) { P.pos.y = Math.max(groundAt(0, 14000), 0) + 450; P.vel.set(0, 0, -40); }
+  }
+  for (const k in CRAFT) CRAFT[k].model.group.visible = false;
   jet.group.visible = true;
+  pilotFig.root.visible = false; F35M.canopy.rotation.x = 0; F35M.canopy.position.set(0, .64, -4.3);
+  ap.phase = ''; eg.shown = false;
   camQ.copy(P.q);
   resetCombat();
 }
@@ -754,13 +1014,17 @@ function readInput(dt) {
   input.pitch = clamp(p, -1, 1); input.roll = clamp(r, -1, 1); input.yaw = clamp(y, -1, 1);
 
   const up = k('Digit2') || k('Numpad2') || k('KeyR'), dn = k('Digit1') || k('Numpad1') || k('KeyF');
-  if (up) {
+  if (craft().heli && lv().auto) {   // Leicht: Steigen und Sinken wie ein Federhebel, loslassen hält die Höhe
+    const tgt = up ? 1 : dn ? 0 : .5;
+    P.thrCmd += clamp(tgt - P.thrCmd, -dt * 2.5, dt * 2.5);
+  } else if (up) {
     let nx = P.thrCmd + dt * .5;
-    if (nx >= 1 && !P.abPass && !lv().auto) { nx = 1; if (!P.abHint) { P.abHint = true; toast('100 % Schub, 2 nochmals drücken für den Nachbrenner'); } }
+    if (craft().heli) nx = Math.min(1, nx);
+    else if (nx >= 1 && !P.abPass && !lv().auto) { nx = 1; if (!P.abHint) { P.abHint = true; toast('100 % Schub, 2 nochmals drücken für den Nachbrenner'); } }
     P.thrCmd = Math.min(1.1, nx);
   }
-  if (dn) P.thrCmd = Math.max(0, P.thrCmd - dt * .5);
-  if (pad && pad.thr) P.thrCmd = clamp(P.thrCmd + pad.thr * dt * .6, 0, 1.1);
+  if (dn && !(craft().heli && lv().auto)) P.thrCmd = Math.max(0, P.thrCmd - dt * .5);
+  if (pad && pad.thr) P.thrCmd = clamp(P.thrCmd + pad.thr * dt * .6, 0, craft().heli ? 1 : 1.1);
   if (P.thrCmd < .999) P.abPass = false;
   P.brake = k('KeyB') || touch.brake || btnBrake || !!(pad && pad.brake);
   P.firing = k('Space') || touch.fire || !!(pad && pad.fire);
@@ -778,7 +1042,9 @@ addEventListener('keydown', e => {
     case 'KeyM': toggleSound(); break;
     case 'KeyI': invert = !invert; toast(invert ? 'Höhensteuer umgekehrt: ↓ hebt die Nase' : 'Höhensteuer normal: ↑ hebt die Nase'); break;
     case 'Digit2': case 'Numpad2': case 'KeyR': if (P.thrCmd >= .999) P.abPass = true; break;
-    case 'Enter': if (mode === 'brief') canResume ? resume() : begin(false); break;
+    case 'KeyL': if (e.shiftKey) startAutoland(); break;
+    case 'KeyX': toggleSmoke(); break;
+    case 'Enter': if (mode === 'brief') canResume ? resume() : begin(false); else if (mode === 'landed' && eg.shown) begin(false); break;
   }
 });
 addEventListener('keyup', e => keys.delete(e.code));
@@ -803,8 +1069,63 @@ function pollPad() {
 }
 
 // ---------- Physik
-const thrustAcc = t => t <= 1 ? 5.9 * t : 5.9 + (t - 1) / .1 * 3.5;
+const thrustAcc = t => { const c = craft(); return t <= 1 ? c.mil * t : c.mil + (t - 1) / .1 * c.ab; };
+function reloadIfParked() {
+  if (P.s < 3 && Math.abs(P.pos.x) < 500 && Math.abs(P.pos.z) < 2000 && (combat.ammo < AMMO_MAX || combat.msl < mslCap())) { combat.ammo = AMMO_MAX; combat.msl = mslCap(); toast('Aufmunitioniert: ' + AMMO_MAX + ' Schuss, ' + combat.msl + ' Raketen'); }
+}
+// Hubschrauber: Schub entlang der Rotorachse, Lage folgt dem Steuer, bei Fahrt dreht das Heck in den Fahrtwind
+function heliStep(dt) {
+  readInput(dt);
+  const easy = lv().auto;
+  P.thr += (P.thrCmd - P.thr) * Math.min(1, dt * 2.5);
+  const alt = Math.max(0, P.pos.y), rho = Math.exp(-alt / 9500);
+  const pT = -input.pitch * .42, rT = input.roll * .5;
+  P.hp += (pT - P.hp) * Math.min(1, dt * 2.2); P.hr += (rT - P.hr) * Math.min(1, dt * 2.6);
+  const hs = Math.hypot(P.vel.x, P.vel.z);
+  let yawR = input.yaw * 1.1;
+  if (!P.onGround && hs > 12) { const df = wrapA(Math.atan2(P.vel.x, -P.vel.z) - P.hdg); if (Math.abs(df) < 1.7) yawR += clamp(df, -1, 1) * Math.min(1, (hs - 12) / 25) * 1.4; }
+  P.hdg = wrapA(P.hdg + yawR * dt);
+  if (P.onGround) { P.hp *= 1 - Math.min(1, dt * 4); P.hr *= 1 - Math.min(1, dt * 4); }
+  P.q.setFromEuler(eul.set(P.hp, -P.hdg, -P.hr, 'YXZ'));
+  upv.set(0, 1, 0).applyQuaternion(P.q); fwd.set(0, 0, -1).applyQuaternion(P.q);
+  let lift;
+  if (easy) {   // Leicht: 2 und 1 geben eine Steig- oder Sinkrate vor, dazwischen wird die Höhe gehalten, kurz über Boden sanft abfangen
+    const k = P.thrCmd - .5, aglM = P.pos.y - Math.max(groundAt(P.pos.x, P.pos.z), 0) - GH;
+    let vsT = Math.abs(k) < .04 ? 0 : (k - Math.sign(k) * .04) / .46 * 12;
+    vsT = Math.max(vsT, -(1.2 + Math.max(0, aglM) * .25));
+    lift = (G0 + (vsT - P.vel.y) * 1.8) / Math.max(.5, upv.y);
+  } else lift = P.thr * G0 * 1.6;
+  lift = clamp(lift, 0, G0 * 1.75 * Math.sqrt(rho));
+  cv3.copy(upv).multiplyScalar(lift); cv3.y -= G0;
+  cv3.addScaledVector(P.vel, -(4e-4 * P.vel.length() + .03)); cv3.y -= P.vel.y * .35;
+  if (easy && Math.abs(input.pitch) < .05 && Math.abs(input.roll) < .05) { cv3.x -= P.vel.x * .5; cv3.z -= P.vel.z * .5; }
+  P.vel.addScaledVector(cv3, dt);
+  P.pos.addScaledVector(P.vel, dt);
+  const gnd = groundAt(P.pos.x, P.pos.z), floor = Math.max(gnd, 0);
+  if (P.pos.y - GH <= floor) {
+    if (!P.onGround) {
+      const sink = -P.vel.y, L_ = lv(), lim = L_.sink * .6, h2 = Math.hypot(P.vel.x, P.vel.z);
+      if (gnd < .3) return crash('Ins Wasser gestürzt');
+      if (h2 > 40) return crash('Mit ' + Math.round(h2 * KT) + ' kt ins Gelände geflogen');
+      if (sink > lim) return crash('Aufschlag mit ' + sink.toFixed(1) + ' m/s Sinkrate, das Fahrwerk hält ' + lim.toFixed(1) + ' m/s aus');
+      if (Math.abs(P.hr) > L_.roll * .8 * DEG || P.hp < -L_.roll * .8 * DEG) return crash('Die Rotorblätter haben den Boden berührt');
+      if (h2 > (easy ? 25 : 15)) return crash('Mit ' + Math.round(h2 * KT) + ' kt aufgesetzt, das Fahrwerk ist weggebrochen');
+      if (slopeAt(P.pos.x, P.pos.z) > 8) return crash('Aufsetzen im zu steilen Gelände');
+      P.onGround = true; toast('Aufgesetzt mit ' + sink.toFixed(1) + ' m/s, ' + (sink < 1 ? 'butterweich' : sink < 2.5 ? 'sauber' : 'hart, aber heil'));
+    }
+    P.pos.y = floor + GH;
+    if (P.vel.y < 0) P.vel.y = 0;
+    const fr = Math.max(0, 1 - dt * 4); P.vel.x *= fr; P.vel.z *= fr;
+  } else if (P.onGround && P.pos.y - GH > floor + .05) { P.onGround = false; toast(easy ? 'Abgehoben, loslassen hält die Höhe' : 'Abgehoben'); }
+  P.s = P.vel.length();
+  if (P.s > 1) P.dir.copy(P.vel).divideScalar(P.s); else P.dir.copy(fwd);
+  P.L = lift; P.aoa = 0; P.vsEff = 0; P.maxL = 1e9; P.gear = true; P.gearAnim = 1; P.pr = 0;
+  if (!P.onGround) { P.airTime += dt; P.maxG = Math.max(P.maxG, lift / G0); }
+  else reloadIfParked();
+  P.maxKt = Math.max(P.maxKt, P.s * KT);
+}
 function step(dt) {
+  if (craft().heli) return heliStep(dt);
   readInput(dt);
   P.thr += (P.thrCmd - P.thr) * Math.min(1, dt * (P.thrCmd > P.thr ? 1.2 : 2));
   P.gearAnim = clamp(P.gearAnim + (P.gear ? dt : -dt) / 4, 0, 1);
@@ -814,18 +1135,18 @@ function step(dt) {
   const vsEff = VS / Math.sqrt(rho), s = Math.max(P.s, 2), qr = (s / vsEff) ** 2;
   invQ.copy(P.q).invert(); dL.set(0, -1, 0).applyQuaternion(invQ);
   const gUp = G0 * dL.y, gRight = G0 * dL.x, gFwd = -G0 * dL.z;
-  const maxL = G0 * Math.min(9, qr), minL = -G0 * Math.min(3, qr);
+  const maxL = G0 * Math.min(craft().gmax, qr), minL = -G0 * Math.min(3, qr);
   P.maxL = maxL; P.vsEff = vsEff;
 
   P.pr += (input.pitch * .55 - P.pr) * Math.min(1, dt * 6);
   const L = clamp(s * P.pr - gUp, minL, maxL);
   const wP = clamp((L + gUp) / s, -1.4, 1.4);
   const auth = clamp(s / 80, .1, 1);
-  P.rr += (input.roll * 2.6 * auth - P.rr) * Math.min(1, dt * 5);
+  P.rr += (input.roll * craft().roll * auth - P.rr) * Math.min(1, dt * 5);
   P.yr += (input.yaw * .3 * auth - P.yr) * Math.min(1, dt * 3);
 
-  const kM = 1 + .55 * smooth(.9, 1.08, mach) - .2 * smooth(1.1, 1.7, mach);
-  const Dp = 5.2e-5 * rho * s * s * kM + 1.6e-5 * s * s * P.gearAnim * rho;
+  const kM = 1 + craft().mach * smooth(.9, 1.08, mach) - .2 * smooth(1.1, 1.7, mach);
+  const Dp = craft().cd * rho * s * s * kM + 1.6e-5 * s * s * P.gearAnim * rho;
   const T = thrustAcc(P.thr) * Math.pow(rho, .6);
 
   if (P.onGround) {
@@ -843,7 +1164,7 @@ function step(dt) {
     P.L = G0; P.aoa = 0; P.dir.set(Math.sin(P.hdg), 0, -Math.cos(P.hdg));
     if (gnd < .5) return crash('Ins Wasser gerollt');
     if (P.s > 25 && slopeAt(P.pos.x, P.pos.z) > 5) return crash('Mit ' + Math.round(P.s * KT) + ' kt von der Piste ins Gelände gerast');
-    if (P.s < 3 && Math.abs(P.pos.x) < 500 && Math.abs(P.pos.z) < 2000 && (combat.ammo < AMMO_MAX || combat.msl < lv().msl)) { combat.ammo = AMMO_MAX; combat.msl = lv().msl; toast('Aufmunitioniert: ' + AMMO_MAX + ' Schuss, ' + combat.msl + ' Raketen'); }
+    reloadIfParked();
     if (P.s > vsEff && P.gp > aoaG + .012) { P.onGround = false; P.pos.y += .05; P.grace = 4; toast(lv().auto ? 'Abgehoben, das Fahrwerk fährt automatisch ein' : 'Abgehoben, weiter steigen und dann Fahrwerk mit G einfahren'); }
   } else {
     P.s = Math.max(0, P.s + (T - Dp - 60 * L * L / (rho * s * s + 1) + gFwd - (P.brake ? 3.5 : 0)) * dt);
@@ -919,16 +1240,27 @@ const camQ = new Qt(), camOff = new V3(), look = new V3();
 let orbit = { yaw: 2.4, pitch: .22, dist: 34 };
 const camNames = ['Verfolger', 'Cockpit', 'Aussen'];
 function updateCamera(dt) {
-  const cockpit = mode === 'fly' && camMode === 1;
-  jet.canopy.visible = jet.pilot.visible = !cockpit;
+  const flying = mode === 'fly' || mode === 'auto', cockpit = flying && camMode === 1;
+  jet.canopy.visible = !cockpit; jet.pilot.visible = !cockpit && !pilotFig.root.visible;
+  if (mode === 'landed') {
+    camera.fov += (48 - camera.fov) * Math.min(1, dt * 2); camera.updateProjectionMatrix();
+    jet.group.updateMatrixWorld();
+    camera.position.copy(eg.cam); jet.group.localToWorld(camera.position);
+    look.copy(eg.look); jet.group.localToWorld(look);
+    camera.up.set(0, 1, 0); camera.lookAt(look);
+    sky.position.copy(camera.position);
+    return;
+  }
   camera.fov += ((cockpit ? 72 : 62) - camera.fov) * Math.min(1, dt * 6); camera.updateProjectionMatrix();
-  if (mode === 'fly' && camMode === 0) {
-    camQ.slerp(P.q, 1 - Math.exp(-dt * 4.5));
-    camOff.set(0, 4.4, 19 + P.s * .012).applyQuaternion(camQ);
+  if (flying && camMode === 0) {
+    if (craft().heli) tq.setFromEuler(eul.set(-.08, -P.hdg, 0, 'YXZ')); else tq.copy(P.q);
+    camQ.slerp(tq, 1 - Math.exp(-dt * 4.5));
+    const ch = craft().chase;
+    camOff.set(0, ch[0], ch[1] + P.s * .012).applyQuaternion(camQ);
     camera.position.copy(P.pos).add(camOff);
     camera.up.set(0, 1, 0).applyQuaternion(camQ);
   } else if (cockpit) {
-    camera.position.set(0, 1.0, -4.62).applyQuaternion(P.q).add(P.pos);
+    camera.position.fromArray(craft().cock).applyQuaternion(P.q).add(P.pos);
     camera.quaternion.copy(P.q);
   } else {
     if (mode !== 'fly' && !dragging) orbit.yaw += dt * .07;
@@ -954,14 +1286,30 @@ cvs.addEventListener('pointerup', endDrag); cvs.addEventListener('pointercancel'
 cvs.addEventListener('wheel', e => { orbit.dist = clamp(orbit.dist * (1 + Math.sign(e.deltaY) * .1), 16, 200); }, { passive: true });
 
 // ---------- Modell und Effekte nachführen
-let strobeT = 0, smokeT = 0;
+let strobeT = 0, smokeT = 0, smokeOn = false, smokeTrailT = 0;
+const trailTex = radialTex(['rgba(255,255,255,.95)', 'rgba(245,245,245,.55)', 'rgba(240,240,240,0)']);
+// Rauch der Patrouille Suisse: bleibt lange in der Luft stehen und weitet sich langsam auf
+function trail(at) {
+  const m = new THREE.SpriteMaterial({ map: trailTex, transparent: true, depthWrite: false });
+  const sp = new THREE.Sprite(m); sp.position.copy(at); scene.add(sp);
+  parts.push({ sp, v: new V3((rnd() - .5) * 1.5, (rnd() - .5) * 1.5, (rnd() - .5) * 1.5), life: 0, max: 9 + rnd() * 3, s0: 3, grow: 26, o: .8, rise: .05 });
+}
+function toggleSmoke() {
+  if (mode !== 'fly') return;
+  if (!craft().smoke) return toast('Rauch gibt es nur beim Tiger der Patrouille Suisse');
+  smokeOn = !smokeOn; toast(smokeOn ? 'Rauch an' : 'Rauch aus');
+}
 function updateModel(dt) {
   jet.group.position.copy(P.pos); jet.group.quaternion.copy(P.q);
   const ga = P.gearAnim, e = ga * ga * (3 - 2 * ga);
   jet.gear.scale.y = Math.max(.001, e); jet.gear.visible = ga > .01;
   const ab = clamp((P.thr - 1) / .1, 0, 1), fl = 1 + (Math.random() - .5) * .16;
-  jet.flame.visible = ab > .02;
-  jet.flame.scale.set((.85 + ab * .2) * fl, (.85 + ab * .2) * fl, (.35 + ab * .75) * (1 + (Math.random() - .5) * .1));
+  for (const f of jet.flames) { f.visible = ab > .02; f.scale.set((.85 + ab * .2) * fl, (.85 + ab * .2) * fl, (.35 + ab * .75) * (1 + (Math.random() - .5) * .1)); }
+  if (jet.rotor) { jet.rotor.rotation.y -= dt * (mode === 'crash' ? 0 : 13); jet.tailRotor.rotation.x += dt * (mode === 'crash' ? 0 : 40); }
+  if (craft().smoke && smokeOn && mode === 'fly' && !P.onGround) {
+    smokeTrailT -= dt;
+    if (smokeTrailT <= 0) { smokeTrailT = .03; trail(cv4.copy(jet.smokeAt).applyQuaternion(P.q).add(P.pos)); }
+  }
   jet.flameMats.forEach((m, i) => { m.opacity = (i === 0 ? .5 : i === 1 ? .75 : .45) * ab; });
   const heat = clamp(P.thr, 0, 1.1);
   jet.glowMat.color.setRGB(.1 + heat * .9, .03 + heat * .32 + ab * .3, .02 + ab * .2);
@@ -989,12 +1337,308 @@ function crash(why) {
   for (let i = 0; i < 30; i++) puff(P.pos, false);
   orbit.pitch = .35;
   $('#crashWhy').textContent = why;
-  const mm = Math.floor(P.airTime / 60), ss = Math.floor(P.airTime % 60);
-  $('#crashStats').innerHTML = 'Punkte ' + fmt(combat.score) + ' · Abschüsse ' + combat.kills + ' · Münzen ' + combat.coins + '<br>Flugzeit ' + mm + ':' + String(ss).padStart(2, '0') + ' min<br>Höchstgeschwindigkeit ' + Math.round(P.maxKt) + ' kt<br>Höchste Last ' + P.maxG.toFixed(1) + ' g';
+  $('#crashStats').innerHTML = statsHTML();
   for (const b of bullets) { b.live = false; b.mesh.visible = false; }
   for (const m of missiles) scene.remove(m.mesh); missiles.length = 0; combat.lockTg = null;
   boom();
   showUI();
+}
+function statsHTML() {
+  const mm = Math.floor(P.airTime / 60), ss = Math.floor(P.airTime % 60);
+  return 'Punkte ' + fmt(combat.score) + ' · Abschüsse ' + combat.kills + ' · Münzen ' + combat.coins + '<br>Flugzeit ' + mm + ':' + String(ss).padStart(2, '0') + ' min<br>Höchstgeschwindigkeit ' + Math.round(P.maxKt) + ' kt<br>Höchste Last ' + P.maxG.toFixed(1) + ' g';
+}
+
+// ---------- Versteckter Befehl Shift+L: Autopilot landet auf Piste 36, die Pilotin steigt aus
+// Pilotin: Wurzel auf Fusshöhe, Blick nach +z, ihre rechte Seite liegt bei −x
+function buildPilot() {
+  const root = new THREE.Group(); root.visible = false;
+  const M = (c, r) => new THREE.MeshStandardMaterial({ color: lin(c), roughness: r });
+  const suit = M('#5d684f', .85), vest = M('#2f362c', .7), skinM = M('#f3cbaa', .55), boot = M('#1c1d1f', .6), glove = M('#2b2e28', .8);
+  const hairM = new THREE.MeshStandardMaterial({ color: lin('#ecd08a'), roughness: .42, side: THREE.DoubleSide });
+  const add = (geo, mat, parent, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; parent.add(m); return m; };
+  const joint = (parent, x, y, z) => { const j = new THREE.Group(); j.position.set(x, y, z); parent.add(j); return j; };
+  const limb = (parent, r0, r1, len, mat) => { const g = new THREE.CylinderGeometry(r0, r1, len, 12); g.translate(0, -len / 2, 0); return add(g, mat, parent); };
+  const ball = (r, sx, sy, sz) => new THREE.SphereGeometry(r, 20, 14).scale(sx, sy, sz);
+  const tube = (r0, r1, h, sz) => new THREE.CylinderGeometry(r0, r1, h, 18).scale(1, 1, sz);
+
+  // Rumpf: Fliegerkombi mit Weste, schmale Taille
+  add(tube(.165, .12, .3, .68), suit, root, 0, 1.27, 0);
+  add(tube(.172, .135, .22, .74), vest, root, 0, 1.25, 0);
+  add(ball(.17, 1.12, .42, .66), suit, root, 0, 1.4, 0);
+  add(tube(.12, .155, .24, .72), suit, root, 0, 1.0, 0);
+  add(tube(.126, .126, .035, .74), vest, root, 0, 1.1, 0);
+  add(ball(.15, 1, .55, .72), suit, root, 0, .89, 0);
+  add(tube(.043, .05, .1, 1), skinM, root, 0, 1.47, 0);
+
+  // Kopf mit Gesicht
+  const head = joint(root, 0, 1.52, 0);
+  add(ball(.1, .9, 1.12, 1), skinM, head, 0, .1, 0);
+  add(ball(.075, 1, .8, 1), skinM, head, 0, .05, .02);
+  const eyeM = M('#2d6db0', .25), browM = M('#b38b46', .6);
+  for (const s of [-1, 1]) {
+    add(ball(.013, 1, 1, .6), eyeM, head, s * .034, .11, .09);
+    add(new THREE.BoxGeometry(.032, .007, .01), browM, head, s * .035, .135, .088).rotation.z = -s * .12;
+  }
+  add(ball(.013, 1, 1.3, 1), skinM, head, 0, .088, .1);
+  add(ball(.022, 1.3, .42, .6), M('#c4505d', .4), head, 0, .047, .088);
+
+  // Lange blonde Haare, unter dem Helm verborgen
+  const hair = joint(head, 0, 0, 0); hair.visible = false;
+  add(new THREE.SphereGeometry(.104, 24, 12, 0, Math.PI * 2, 0, Math.PI * .4).scale(.95, 1.1, 1.05), hairM, hair, 0, .112, -.004);
+  add(new THREE.SphereGeometry(.106, 24, 14, Math.PI * .9, Math.PI * 1.2, 0, Math.PI * .78).scale(.96, 1.08, 1.05), hairM, hair, 0, .105, -.006);
+  add(ball(.06, 1.5, .5, .6), hairM, hair, .03, .155, .075).rotation.z = -.3;
+  const hairLong = joint(hair, 0, .1, -.01);
+  const lg = new THREE.CylinderGeometry(.1, .135, .36, 20, 1, true, Math.PI * .38, Math.PI * 1.24); lg.translate(0, -.18, 0);
+  add(lg, hairM, hairLong);
+
+  // Helm mit goldenem Visier, hängt an der Wurzel, damit er abgenommen werden kann
+  const helmet = joint(root, 0, 1.63, .005);
+  add(ball(.138, 1, 1.06, 1.1), M('#dadee2', .35), helmet);
+  add(new THREE.SphereGeometry(.145, 20, 10, Math.PI * .15, Math.PI * .7, Math.PI * .34, Math.PI * .26).scale(1, 1.06, 1.1),
+    new THREE.MeshStandardMaterial({ color: lin('#3a2a12'), roughness: .05, metalness: .9 }), helmet);
+
+  const arms = {}, legs = {};
+  for (const [k, s] of [['R', -1], ['L', 1]]) {
+    const sh = joint(root, s * .205, 1.4, 0); limb(sh, .05, .042, .29, suit);
+    const el = joint(sh, 0, -.29, 0); limb(el, .043, .034, .25, suit); add(ball(.04, .85, 1.25, .6), glove, el, 0, -.285, 0);
+    arms[k] = { s: sh, e: el };
+    const hip = joint(root, s * .088, .92, 0); limb(hip, .074, .056, .44, suit);
+    const kn = joint(hip, 0, -.44, 0); limb(kn, .056, .045, .4, suit); add(new THREE.BoxGeometry(.1, .1, .25), boot, kn, 0, -.43, .04);
+    legs[k] = { h: hip, k: kn };
+  }
+  return { root, head, hair, hairLong, helmet, arms, legs };
+}
+const pilotFig = buildPilot();
+jet.group.add(pilotFig.root);
+
+// Zweigelenk-IK für die Arme: Hand zum Ziel (im Pilotinnen-System), Ellbogen Richtung pole
+const DOWN = new V3(0, -1, 0), ikU = new V3(), ikW = new V3(), ikE = new V3(), ikQ = new Qt();
+function reach(arm, T, pole) {
+  const a = .29, b = .285;
+  ikU.subVectors(T, arm.s.position);
+  const d = clamp(ikU.length(), .12, a + b - .002); ikU.normalize();
+  const ca = (a * a + d * d - b * b) / (2 * a * d), sa = Math.sqrt(Math.max(0, 1 - ca * ca));
+  ikW.copy(pole).addScaledVector(ikU, -pole.dot(ikU)).normalize();
+  ikE.copy(ikU).multiplyScalar(ca).addScaledVector(ikW, sa);
+  arm.s.quaternion.setFromUnitVectors(DOWN, ikE);
+  ikW.copy(ikU).multiplyScalar(d).addScaledVector(ikE, -a).normalize().applyQuaternion(ikQ.copy(arm.s.quaternion).invert());
+  arm.e.quaternion.setFromUnitVectors(DOWN, ikW);
+}
+
+// Die Piste liegt in einem Talkessel, die Hänge 1 km vor der Schwelle sind 400 bis 700 m hoch.
+// Darum ein geländeangepasstes Anflugprofil entlang der Pistenachse: nie steigen, höchstens 11° sinken.
+const FAF_Z = 8500, AP_Z0 = -1500, AP_STEP = 50, AP_DESC = Math.tan(11 * DEG);
+let apProf = null;
+function apProfile() {
+  const n = Math.ceil((19000 - AP_Z0) / AP_STEP) + 1, prof = new Float32Array(n);
+  let run = 0;
+  for (let i = 0; i < n; i++) {
+    const z = AP_Z0 + i * AP_STEP;
+    let m = 0;
+    if (z > 2000) { for (let x = -600; x <= 600; x += 150) m = Math.max(m, groundAt(x, z)); m += 75; }
+    run = Math.max(run, m); prof[i] = run;
+  }
+  for (let i = n - 2; i >= 0; i--) prof[i] = Math.max(prof[i], prof[i + 1] - AP_DESC * AP_STEP);
+  for (let i = 0; i < n; i++) prof[i] = Math.max(prof[i], RWY.h + GH);
+  return prof;
+}
+const apAlt = z => { const f = clamp((z - AP_Z0) / AP_STEP, 0, apProf.length - 1.001), i = f | 0; return apProf[i] + (apProf[i + 1] - apProf[i]) * (f - i); };
+const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
+const ap = { phase: '', wps: [], t: 0, hdg: 0, gam: 0, bank: 0, prevD: Infinity };
+// Zeitraffer auf dem Weg zum Endanflug, Steilanflug und Landung in Echtzeit
+const apWarp = () => ap.phase === 'nav' ? 3 : ap.phase === 'final' && P.pos.z > 3600 ? 2 : 1;
+
+function startAutoland() {
+  if (mode !== 'fly') return;
+  if (craft().heli) return toast('Die Autolandung gibt es nur für die Jets');
+  if (!apProf) apProf = apProfile();
+  mode = 'auto'; canResume = false;
+  // Luftraum räumen
+  for (const t of targets) scene.remove(t.mesh); targets.length = 0;
+  for (const c of coins) scene.remove(c.mesh); coins.length = 0;
+  for (const b of bullets) { b.live = false; b.mesh.visible = false; }
+  for (const m of missiles) scene.remove(m.mesh); missiles.length = 0; combat.lockTg = null;
+  telemetry();
+  ap.hdg = Math.atan2(P.dir.x, -P.dir.z); ap.gam = Math.asin(clamp(P.dir.y, -1, 1)); ap.bank = clamp(tel.roll, -1.2, 1.2);
+  ap.prevD = Infinity; ap.wps.length = 0;
+  if (P.onGround) { ap.phase = 'roll'; ap.hdg = P.hdg; }
+  else {
+    ap.phase = 'nav'; P.s = Math.max(P.s, 70);
+    const faf = apAlt(FAF_Z);
+    // Von Norden oder von der Seite zuerst einen Punkt südlich des Endanflugs ansteuern
+    if (!(P.pos.z > FAF_Z + 3000 && Math.abs(P.pos.x) < P.pos.z - FAF_Z)) ap.wps.push(new V3((P.pos.x < 0 ? -1 : 1) * 3500, Math.max(1000, faf + 250), FAF_Z + 5000));
+    ap.wps.push(new V3(0, faf, FAF_Z));
+  }
+  toast('Autopilot aktiv: Landung auf Piste 36, Basis Alpenrand');
+  showUI();
+}
+
+function autoStep(dt) {
+  P.thr += (P.thrCmd - P.thr) * Math.min(1, dt * 1.5);
+  P.gearAnim = clamp(P.gearAnim + (P.gear ? dt : -dt) / 4, 0, 1);
+  const x = P.pos.x, z = P.pos.z, floor = Math.max(groundAt(x, z), 0) + GH;
+
+  if (ap.phase === 'roll') {
+    P.s = Math.max(0, P.s - (P.s > 15 ? 4.5 : 2.4) * dt);
+    P.thrCmd = 0; P.brake = true;
+    if (Math.abs(ap.hdg) < .3) ap.hdg += clamp(clamp(-x * .02, -.06, .06) - ap.hdg, -.05 * dt, .05 * dt);
+    P.gp = Math.max(0, P.gp - dt * .07); P.hdg = ap.hdg;
+    P.pos.x += Math.sin(ap.hdg) * P.s * dt; P.pos.z -= Math.cos(ap.hdg) * P.s * dt;
+    P.pos.y = Math.max(groundAt(P.pos.x, P.pos.z), 0) + GH;
+    P.q.setFromEuler(eul.set(P.gp, -ap.hdg, 0, 'YXZ'));
+    P.dir.set(Math.sin(ap.hdg), 0, -Math.cos(ap.hdg)); P.L = G0; P.aoa = 0; P.onGround = true;
+    if (P.s <= 0 && P.gp <= 0) enterLanded();
+    return;
+  }
+
+  if (ap.phase === 'nav') {
+    const wp = ap.wps[0], d = Math.hypot(wp.x - x, wp.z - z);
+    if (d < 1400 || (d < 3500 && d > ap.prevD)) {
+      ap.wps.shift(); ap.prevD = Infinity;
+      if (!ap.wps.length) { ap.phase = 'final'; P.gear = true; toast('Endanflug Piste 36, Fahrwerk fährt aus'); }
+    } else ap.prevD = d;
+  }
+  let hdgCmd, vsCmd, vT, bankMax;
+  if (ap.phase === 'nav') {
+    const wp = ap.wps[0], d = Math.hypot(wp.x - x, wp.z - z);
+    hdgCmd = Math.atan2(wp.x - x, -(wp.z - z));
+    let ahead = 0;
+    for (let s = 500; s <= 5000; s += 500) ahead = Math.max(ahead, groundAt(x + Math.sin(ap.hdg) * s, z - Math.cos(ap.hdg) * s));
+    const alt = Math.max(wp.y, ahead + 300, floor + 150);
+    if (P.pos.y - alt > d * .2 + 400) hdgCmd = ap.hdg + 1;   // viel zu hoch: in einer Kurve absteigen
+    vsCmd = clamp((alt - P.pos.y) * .12, -45, 40);
+    vT = ap.wps.length === 1 && d < 5000 ? 120 : 220; bankMax = 55 * DEG;
+    P.thrCmd = vT > 150 ? .9 : .6;
+  } else {
+    const h = P.pos.y - floor;
+    hdgCmd = clamp(-x * .003, -.6, .6);
+    vsCmd = clamp((apAlt(z - P.s * 1.5) - P.pos.y) / 1.5, -20, 15);
+    if (h < 40) vsCmd = -(.6 + h * .3);   // Abfangen
+    vT = h < 40 ? 72 : z > 5000 ? 120 : z > 3200 ? 90 : 76; bankMax = (h < 60 ? 8 : 30) * DEG;
+    P.thrCmd = .45;
+  }
+
+  P.s += clamp(vT - P.s, -5 * dt, 5 * dt);
+  const v = Math.max(P.s, 40), wMax = G0 * Math.tan(bankMax) / v;
+  const bT = Math.atan(clamp(wrapA(hdgCmd - ap.hdg) * .5, -wMax, wMax) * v / G0);
+  ap.bank += (bT - ap.bank) * Math.min(1, dt * 1.6);
+  ap.hdg = wrapA(ap.hdg + G0 * Math.tan(ap.bank) / v * dt);
+  ap.gam += clamp(Math.asin(clamp(vsCmd / v, -.6, .6)) - ap.gam, -.3 * dt, .3 * dt);
+  const cg = Math.cos(ap.gam);
+  P.dir.set(Math.sin(ap.hdg) * cg, Math.sin(ap.gam), -Math.cos(ap.hdg) * cg);
+  P.pos.addScaledVector(P.dir, P.s * dt);
+  P.aoa = clamp(.244 / Math.max((P.s / VS) ** 2, .3) / Math.cos(ap.bank), 0, .3);
+  P.q.setFromEuler(eul.set(ap.gam + P.aoa, -ap.hdg, -ap.bank, 'YXZ'));
+  P.L = G0 / Math.cos(ap.bank); P.onGround = false;
+  P.airTime += dt; P.maxKt = Math.max(P.maxKt, P.s * KT);
+
+  const fl = Math.max(groundAt(P.pos.x, P.pos.z), 0) + GH;
+  if (ap.phase === 'final' && P.pos.y <= fl) {
+    P.pos.y = fl; P.onGround = true; P.gp = clamp(ap.gam + P.aoa, 0, 14 * DEG); P.rr = 0; P.thrCmd = 0;
+    ap.phase = 'roll'; ap.bank = 0;
+    toast('Aufgesetzt, der Autopilot bremst');
+  } else if (P.pos.y < fl + 25 && (ap.phase === 'nav' || P.pos.z > 2100)) P.pos.y = fl + 25;
+}
+
+// Ausstieg: Haube auf, Pilotin klettert über den Lufteinlass, springt ab, nimmt den Helm ab und salutiert
+const eg = { cam: new V3(), look: new V3(), rot: Math.PI, shown: false };
+const EG_PATH = [ // Zeit, x, y, z (im Flugzeug-System), Sprunghöhe, gehen
+  [1.9, 0, -.72, -4.6], [2.3, 0, -.72, -4.6], [3.0, 0, -.32, -4.6], [3.3, 0, -.32, -4.6],
+  [4.1, -1.5, .5, -2.6, .35], [4.4, -1.5, .5, -2.6], [5.1, -3.3, -2.25, -2.9, .4], [5.6, -3.3, -2.25, -2.9], [7.8, -4.7, -2.25, -6.6, 0, 1]];
+const PF = new V3(-4.7, -2.25, -6.6), CAM_DIR = new V3(-.38, 0, -.92).normalize(), FACE = Math.atan2(CAM_DIR.x, CAM_DIR.z);
+const WALK_DIR = Math.atan2(PF.x - EG_PATH[7][1], PF.z - EG_PATH[7][3]);
+const HAND_R = new V3(-.25, .83, .05), HAND_L = new V3(.25, .83, .05), SEAT_R = new V3(-.14, .98, .3), SEAT_L = new V3(.14, .98, .3);
+const SALUTE = new V3(-.075, 1.665, .12), HELM0 = new V3(0, 1.63, .005), HELM_UP = new V3(0, 1.93, .07), HELM_HIP = new V3(.28, 1.0, .1);
+const POLE_R = new V3(-.4, -.3, -1).normalize(), POLE_L = new V3(.4, -.3, -1).normalize(), POLE_S = new V3(-1, .1, .15).normalize();
+const POLE_HR = new V3(-1, -.4, -.2).normalize(), POLE_HL = new V3(1, -.4, -.2).normalize();
+const egA = new V3(), egB = new V3(), egH = new V3(), egPR = new V3(), egPL = new V3(), egC = new V3(), egL = new V3();
+
+function enterLanded() {
+  mode = 'landed'; ap.phase = 'egress'; ap.t = 0; eg.shown = false;
+  P.s = 0; P.thr = P.thrCmd = 0; P.brake = false;
+  updateModel(0); jet.group.updateMatrixWorld(true);
+  eg.cam.copy(camera.position); jet.group.worldToLocal(eg.cam);
+  eg.look.set(0, .5, -3); eg.rot = Math.PI;
+  toast(jet === F35M ? 'Triebwerk aus, Kabinenhaube öffnet' : 'Triebwerke aus, sicher gelandet');
+  showUI();
+}
+
+function egressUpdate(dt) {
+  if (jet !== F35M) {   // andere Jets: Kamerafahrt um das stehende Flugzeug, dann die Karte
+    const t = ap.t += dt;
+    egC.set(-12, 3.4, -17); egL.set(0, .6, -1);
+    eg.cam.lerp(egC, 1 - Math.exp(-dt * .8)); eg.look.lerp(egL, 1 - Math.exp(-dt * 2));
+    if (t > 3 && !eg.shown) { eg.shown = true; $('#landedStats').innerHTML = statsHTML(); showUI(); ding(); }
+    return;
+  }
+  const t = ap.t += dt, F = pilotFig;
+  const a = .95 * smooth(.5, 2, t);   // Haube schwenkt um ihre Vorderkante nach oben
+  jet.canopy.rotation.x = -a; jet.canopy.position.set(0, .64 + 1.85 * Math.sin(a), -6.15 + 1.85 * Math.cos(a));
+  F.root.visible = t > 1.9;
+
+  const K = EG_PATH; let i = 1;
+  while (i < K.length - 1 && t > K[i][0]) i++;
+  const k0 = K[i - 1], k1 = K[i], u = clamp((t - k0[0]) / (k1[0] - k0[0]), 0, 1), e = k1[5] ? u : u * u * (3 - 2 * u);
+  F.root.position.set(k0[1] + (k1[1] - k0[1]) * e, k0[2] + (k1[2] - k0[2]) * e + (k1[4] || 0) * 4 * u * (1 - u), k0[3] + (k1[3] - k0[3]) * e);
+  const rT = t < 3.3 ? Math.PI : t < 5.6 ? -Math.PI / 2 : t < 7.8 ? WALK_DIR : FACE;
+  eg.rot = wrapA(eg.rot + wrapA(rT - eg.rot) * Math.min(1, dt * 5));
+  F.root.rotation.y = eg.rot;
+
+  // Beine: sitzen, aufstehen, Schritt auf den Einlass, Sprung, Landung in der Hocke, gehen
+  const sit = 1 - smooth(2.3, 3.0, t);
+  let hL = -1.45 * sit, hR = hL, kL = 1.45 * sit, kR = kL, bob = 0, walkA = 0, ph = 0;
+  if (t > 3.3 && t < 4.1) { const s = Math.sin(Math.PI * (t - 3.3) / .8); hL -= .9 * s; kL += 1.2 * s; hR -= .3 * s; kR += .5 * s; }
+  if (t > 4.4 && t < 5.1) { const s = Math.sin(Math.PI * (t - 4.4) / .7); hL -= .6 * s; hR -= .6 * s; kL += 1.1 * s; kR += 1.1 * s; }
+  if (t > 5.02) { const c = Math.sin(Math.PI * clamp((t - 5.02) / .65, 0, 1)); hL -= .55 * c; hR -= .55 * c; kL += 1.1 * c; kR += 1.1 * c; bob = -.12 * c; }
+  if (t > 5.6) {
+    walkA = smooth(5.6, 5.85, t) * (1 - smooth(7.55, 7.8, t)); ph = (t - 5.6) * Math.PI * 2 * 1.5;
+    hL += .42 * walkA * Math.sin(ph); hR -= .42 * walkA * Math.sin(ph);
+    kL += .6 * walkA * Math.max(0, -Math.cos(ph)); kR += .6 * walkA * Math.max(0, Math.cos(ph));
+    bob -= .02 * walkA * Math.abs(Math.sin(ph));
+  }
+  F.legs.L.h.rotation.x = hL; F.legs.L.k.rotation.x = kL; F.legs.R.h.rotation.x = hR; F.legs.R.k.rotation.x = kR;
+  F.root.position.y += bob;
+
+  // Arme: Ziele für die Hände, danach IK
+  egPR.copy(POLE_R); egPL.copy(POLE_L);
+  egA.copy(SEAT_R).lerp(HAND_R, 1 - sit); egB.copy(SEAT_L).lerp(HAND_L, 1 - sit);
+  if (t > 3.3 && t < 4.1) { const s = Math.sin(Math.PI * (t - 3.3) / .8); egA.x -= .1 * s; egA.y += .2 * s; egB.x += .1 * s; egB.y += .2 * s; }
+  if (t > 4.4 && t < 5.4) { const s = Math.sin(Math.PI * (t - 4.4)); egA.x -= .15 * s; egA.y += .35 * s; egB.x += .15 * s; egB.y += .35 * s; }
+  if (walkA) { egA.z -= .14 * walkA * Math.sin(ph); egB.z += .14 * walkA * Math.sin(ph); }
+
+  // Helm mit beiden Händen abnehmen, dann links an der Hüfte halten
+  const grab = smooth(8.3, 8.9, t), lift = smooth(8.9, 9.5, t), stow = smooth(9.5, 10.3, t);
+  egH.copy(HELM0).lerp(HELM_UP, lift).lerp(HELM_HIP, stow);
+  egH.x += .25 * Math.sin(Math.PI * stow); egH.z += .08 * Math.sin(Math.PI * stow);
+  F.helmet.position.copy(egH); F.helmet.rotation.set(0, stow * 1.2, stow * .3);
+  if (grab > 0) {
+    egC.set(egH.x - .15, egH.y - .03, egH.z + .01);
+    egA.lerp(egC, grab * (1 - stow)); egPR.lerp(POLE_HR, grab * (1 - stow)).normalize();
+    egC.set(egH.x + .15 - .09 * stow, egH.y - .03 - .03 * stow, egH.z + .01 + .11 * stow);
+    egB.lerp(egC, grab); egPL.lerp(POLE_HL, grab).normalize();
+  }
+  F.hair.visible = t > 9.1;
+  F.hairLong.scale.y = .3 + .7 * smooth(9.1, 9.7, t);
+  const toss = t > 10.3 && t < 11.5 ? Math.sin((t - 10.3) * Math.PI * 2 * 1.1) * (1 - smooth(10.3, 11.5, t)) : 0;
+
+  // Salut mit der rechten Hand
+  const sal = smooth(11.3, 11.9, t);
+  if (sal > 0) { egA.lerp(SALUTE, sal); egA.z += .18 * Math.sin(Math.PI * sal); egPR.lerp(POLE_S, sal).normalize(); }
+  reach(F.arms.R, egA, egPR); reach(F.arms.L, egB, egPL);
+  F.head.rotation.set(-.05 * sal - .05 * Math.abs(toss), .35 * toss, 0);
+  F.hairLong.rotation.z = -.22 * toss;
+
+  // Kamera: erst Totale auf die Haube, dann mit der Pilotin mit, zuletzt Nahaufnahme
+  if (t < 3.6) { egC.set(-11, 3.2, -16); egL.set(0, .9, -4.2); }
+  else {
+    const close = t > 8.2;
+    egC.copy(PF).addScaledVector(CAM_DIR, close ? 3.4 : 8); egC.y += close ? 1.62 : 1.7;
+    egL.copy(F.root.position); egL.y += close ? 1.45 : 1.0;
+    if (eg.shown && W > 860) { egL.x += .92 * .7; egL.z -= .38 * .7; }   // Platz für die Karte links
+  }
+  eg.cam.lerp(egC, 1 - Math.exp(-dt * 1.1)); eg.look.lerp(egL, 1 - Math.exp(-dt * 3));
+
+  if (t > 13 && !eg.shown) { eg.shown = true; $('#landedStats').innerHTML = statsHTML(); showUI(); ding(); }
 }
 
 // ---------- Gegner, Sperrballone, Münzen, Kanone
@@ -1091,7 +1735,7 @@ function resetCombat() {
   for (const c of coins) scene.remove(c.mesh); coins.length = 0;
   for (const b of bullets) { b.live = false; b.mesh.visible = false; }
   for (const m of missiles) scene.remove(m.mesh); missiles.length = 0;
-  Object.assign(combat, { msl: lv().msl, lockTg: null, lockT: 0, mslT: 0, mslHold: false, wasF: false, score: 0, kills: 0, coins: 0, ammo: AMMO_MAX, fireT: 0, hitT: 0, coinT: 0 });
+  Object.assign(combat, { msl: mslCap(), lockTg: null, lockT: 0, mslT: 0, mslHold: false, wasF: false, score: 0, kills: 0, coins: 0, ammo: AMMO_MAX, fireT: 0, hitT: 0, coinT: 0 });
   combat.prev.copy(P.pos);
   for (let i = 0; i < lv().jets; i++) spawnJet();
   for (let i = 0; i < MAX_BALLOONS; i++) spawnBalloon();
@@ -1107,7 +1751,7 @@ const gunPos = new V3();
 function fireBullet() {
   const b = bullets.find(b => !b.live); if (!b) return;
   fwd.set(0, 0, -1).applyQuaternion(P.q);
-  gunPos.set(-.9, .55, -3.6).applyQuaternion(P.q).add(P.pos);
+  gunPos.fromArray(craft().gun).applyQuaternion(P.q).add(P.pos);
   b.pos.copy(gunPos); b.prev.copy(gunPos);
   b.vel.copy(P.dir).multiplyScalar(P.s).addScaledVector(fwd, 1050);
   b.vel.x += (rnd() - .5) * 6; b.vel.y += (rnd() - .5) * 6; b.vel.z += (rnd() - .5) * 6;
@@ -1136,7 +1780,7 @@ function launchMissile(tg) {
   const mesh = new THREE.Group(); mesh.add(new THREE.Mesh(mslGeo, mslMat));
   const fl = new THREE.Sprite(mslFlame); fl.scale.set(7, 7, 1); fl.position.z = -2.2; mesh.add(fl);
   fwd.set(0, 0, -1).applyQuaternion(P.q);
-  const pos = new V3(combat.msl % 2 ? 2.4 : -2.4, -1.1, -1).applyQuaternion(P.q).add(P.pos);
+  const mo = craft().msl, pos = new V3(combat.msl % 2 ? mo[0] : -mo[0], mo[1], mo[2]).applyQuaternion(P.q).add(P.pos);
   mesh.position.copy(pos); scene.add(mesh);
   missiles.push({ mesh, pos, prev: pos.clone(), dir: fwd.clone(), spd: P.s + 80, life: 10, tg, smoke: 0 });
   combat.msl--; combat.mslT = .6; combat.lockT = 0;
@@ -1185,7 +1829,7 @@ function updateCombat(dt) {
   if (press && locked() && combat.mslT <= 0) { launchMissile(combat.lockTg); combat.mslHold = true; }
   updateMissiles(dt);
   if (P.firing && !combat.mslHold && combat.fireT <= 0) {
-    if (combat.ammo > 0) { combat.fireT = 1 / 14; combat.ammo--; fireBullet(); }
+    if (combat.ammo > 0) { combat.fireT = 1 / craft().rate; combat.ammo--; fireBullet(); }
     else if (combat.fireT < -2) { combat.fireT = 0; toast('Keine Munition, auf der Piste landen und anhalten zum Nachladen'); }
   }
   for (const b of bullets) {
@@ -1255,7 +1899,7 @@ const fmt = n => Math.round(n).toLocaleString('de-CH');
 function drawHUD() {
   const c = hc;
   c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, H);
-  if (mode !== 'fly') return;
+  if (mode !== 'fly' && mode !== 'auto') return;
   const t = tel, small = W < 640;
   const cx = W / 2, cy = H / 2, ppd = H / camera.fov;
   c.strokeStyle = HUD_C; c.fillStyle = HUD_C; c.lineWidth = 1.5;
@@ -1337,13 +1981,15 @@ function drawHUD() {
   const by = H - (small ? 150 : 52), bwid = Math.min(220, W * .5), bx2 = cx - bwid / 2;
   const f = clamp(P.thr / 1.1, 0, 1), mil = bwid / 1.1;
   c.strokeRect(bx2, by, bwid, 8);
+  const heli = !!craft().heli;
   c.fillRect(bx2, by, Math.min(f * bwid, mil), 8);
   if (P.thr > 1) { c.fillStyle = WARN_C.warn; c.fillRect(bx2 + mil, by, (f * bwid) - mil, 8); c.fillStyle = HUD_C; }
-  c.beginPath(); c.moveTo(bx2 + mil, by - 4); c.lineTo(bx2 + mil, by + 12); c.stroke();
+  if (!heli) { c.beginPath(); c.moveTo(bx2 + mil, by - 4); c.lineTo(bx2 + mil, by + 12); c.stroke(); }
   c.textAlign = 'center';
   const ab = P.thrCmd > 1.001;
-  c.fillText(ab ? 'NACHBRENNER ' + Math.round((P.thrCmd - 1) / .1 * 100) + ' %' : 'SCHUB ' + Math.round(P.thrCmd * 100) + ' %', cx, by - 13);
-  const st = [P.gear ? (P.gearAnim > .98 ? 'FW UNTEN' : 'FW FÄHRT') : (P.gearAnim > .02 ? 'FW FÄHRT' : ''), P.brake ? 'BREMSE' : '', invert ? 'INV' : ''].filter(Boolean).join('   ');
+  if (heli) { const k = P.thrCmd - .5; c.fillText(lv().auto ? (Math.abs(k) < .04 ? 'HÖHE HALTEN' : (k > 0 ? 'STEIGEN ' : 'SINKEN ') + Math.round(Math.abs(k - Math.sign(k) * .04) / .46 * 12) + ' M/S') : 'KOLLEKTIV ' + Math.round(P.thrCmd * 100) + ' %', cx, by - 13); }
+  else c.fillText(ab ? 'NACHBRENNER ' + Math.round((P.thrCmd - 1) / .1 * 100) + ' %' : 'SCHUB ' + Math.round(P.thrCmd * 100) + ' %', cx, by - 13);
+  const st = [heli ? '' : P.gear ? (P.gearAnim > .98 ? 'FW UNTEN' : 'FW FÄHRT') : (P.gearAnim > .02 ? 'FW FÄHRT' : ''), P.brake ? 'BREMSE' : '', invert ? 'INV' : ''].filter(Boolean).join('   ');
   if (st) c.fillText(st, cx, by + 24);
 
   // Zielmarkierungen und Visier
@@ -1403,6 +2049,13 @@ function drawHUD() {
     c.strokeRect(cx - tw / 2, wy - 13, tw, 26); c.fillText(txt, cx, wy);
     wy += 32;
   }
+  if (mode === 'auto') {
+    const txt = 'AUTOPILOT · ' + (ap.phase === 'nav' ? 'KURS PISTE 36' : ap.phase === 'final' ? 'ENDANFLUG 36' : 'AUSROLLEN') + (apWarp() > 1 ? ' · ' + apWarp() + '×' : '');
+    c.font = '600 ' + (small ? 15 : 18) + 'px "IBM Plex Mono", ui-monospace, monospace'; c.textAlign = 'center';
+    const tw = c.measureText(txt).width + 22;
+    c.strokeStyle = c.fillStyle = HUD_C;
+    c.strokeRect(cx - tw / 2, wy - 13, tw, 26); c.fillText(txt, cx, wy);
+  }
 }
 
 function drawRadar(c, small) {
@@ -1458,7 +2111,7 @@ function drawRadar(c, small) {
   c.fillText('PUNKTE ' + fmt(combat.score), lx, ly0 + lh);
   c.fillText('ABSCHÜSSE ' + combat.kills + '  MÜNZEN ' + combat.coins, lx, ly0 + lh * 2);
   c.fillStyle = combat.ammo < 60 ? WARN_C.warn : HUD_C;
-  c.fillText('MUNITION ' + combat.ammo + '  RAKETEN ' + combat.msl, lx, ly0 + lh * 3);
+  c.fillText('MUNITION ' + combat.ammo + '  RAKETEN ' + combat.msl + (craft().smoke && smokeOn ? '  RAUCH' : ''), lx, ly0 + lh * 3);
 }
 
 // ---------- Ton
@@ -1476,15 +2129,18 @@ function initAudio() {
   const osc = AC.createOscillator(); osc.type = 'sawtooth'; const bp = filt('bandpass', 800, 9), gW = gain(0); osc.connect(bp).connect(gW).connect(master); osc.start();
   const lp2 = filt('lowpass', 160), gA = gain(0); src().connect(lp2).connect(gA).connect(master);
   const bp2 = filt('bandpass', 1300, .7), gWd = gain(0); src().connect(bp2).connect(gWd).connect(master);
-  snd = { master, lp, gR, osc, bp, gW, gA, gWd, buf };
+  const lfo = AC.createOscillator(); lfo.frequency.value = 0; const lfoG = gain(0); lfo.connect(lfoG).connect(gR.gain); lfo.start();
+  snd = { master, lp, gR, osc, bp, gW, gA, gWd, buf, lfo, lfoG };
 }
 function updateAudio() {
   if (!snd) return;
   const t = AC.currentTime, ab = clamp((P.thr - 1) / .1, 0, 1), th = clamp(P.thr, 0, 1);
   const set = (p, v) => p.setTargetAtTime(v, t, .12);
-  set(snd.master.gain, soundOn && mode === 'fly' ? (camMode === 1 ? .55 : .8) : 0);
+  set(snd.master.gain, soundOn && (mode === 'fly' || mode === 'auto') ? (camMode === 1 ? .55 : .8) : 0);
   set(snd.lp.frequency, 280 + th * 1300); set(snd.gR.gain, .12 + th * .35);
   set(snd.osc.frequency, 300 + th * 950); set(snd.bp.frequency, 300 + th * 950); set(snd.gW.gain, .006 + th * .02);
+  const hl = !!craft().heli;
+  set(snd.lfo.frequency, hl ? 16 + th * 6 : 0); set(snd.lfoG.gain, hl ? .32 : 0);
   set(snd.gA.gain, ab * 1.1); set(snd.gWd.gain, Math.min(.25, P.s / 1600) * (camMode === 1 ? .6 : 1));
 }
 function shot() {
@@ -1526,6 +2182,7 @@ const isTouch = matchMedia('(pointer:coarse)').matches;
 function showUI() {
   $('#brief').hidden = mode !== 'brief';
   $('#crash').hidden = !(mode === 'crash' && crashT > 1.6);
+  $('#landed').hidden = !(mode === 'landed' && eg.shown);
   $('#goResume').hidden = !canResume;
   $('#goRwy').classList.toggle('primary', !canResume);
   $('#touch').hidden = !(isTouch && mode === 'fly');
@@ -1533,9 +2190,10 @@ function showUI() {
   $('#bCam').firstChild.textContent = 'Kamera: ' + camNames[camMode];
 }
 function begin(air) {
-  reset(air); mode = 'fly'; canResume = true; camMode = camMode === 2 ? 0 : camMode;
+  reset(air); mode = 'fly'; canResume = true; camMode = camMode === 2 ? 0 : camMode; smokeOn = false;
   if (!AC) { initAudio(); if (AC) { soundOn = true; AC.resume(); $('#bSnd').setAttribute('aria-pressed', 'true'); } }
   showUI();
+  if (craft().heli) return toast(air ? 'In der Luft, Kurs 360. ↑ fliegt vorwärts, Leertaste feuert' : (lv().auto ? '2 halten zum Steigen, loslassen hält die Höhe' : '2 erhöht den Kollektiv, ab etwa 62 % hebt der Apache ab'));
   toast(air ? 'In 5000 ft, Kurs 360. Gegner rot im Radar, Leertaste feuert' : (isTouch ? 'Schubhebel ganz nach oben, ab 140 kt ziehen' : (lv().auto ? '2 halten für vollen Schub, das Flugzeug hebt von selbst ab' : '2 halten für Schub, ab 140 kt mit ↑ ziehen')));
 }
 function resume() { mode = 'fly'; showUI(); }
@@ -1545,6 +2203,7 @@ function togglePause() {
 }
 function cycleCam() { camMode = (camMode + 1) % 3; showUI(); if (mode === 'fly') toast('Kamera: ' + camNames[camMode] + (camMode === 2 ? ', mit der Maus ziehen zum Drehen' : '')); }
 function toggleGear() {
+  if (craft().heli) return toast('Der Apache hat ein festes Fahrwerk');
   if (P.onGround) return toast('Am Boden bleibt das Fahrwerk unten');
   if (lv().auto) return toast('Level Leicht: das Fahrwerk fährt automatisch');
   if (P.gear && P.pos.y - Math.max(groundAt(P.pos.x, P.pos.z), 0) - GH < 15) return toast('Noch zu tief, Fahrwerk erst ab 50 ft Höhe einfahren');
@@ -1553,13 +2212,41 @@ function toggleGear() {
 
 const tap = (id, fn) => $(id).addEventListener('click', e => { e.currentTarget.blur(); fn(); });
 const lvlEl = $('#lvl');
-function showLevel() { lvlEl.value = level; $('#lvlOut').textContent = lv().name; $('#lvlHint').textContent = lv().hint; }
-lvlEl.addEventListener('input', () => { level = clamp(+lvlEl.value | 0, 1, 3); try { localStorage.setItem('f35level', level); } catch (e) {} showLevel(); });
+function showLevel() { lvlEl.value = level; $('#lvlOut').textContent = lv().name; $('#lvlHint').textContent = craft().heli ? HELI_HINT[level] : lv().hint; }
+// Auswahl des Fluggeräts: Texte, Kenndaten und Tastenbelegung im Startfenster anpassen
+function showCraft() {
+  const c = craft(), heli = !!c.heli;
+  document.querySelectorAll('#crafts button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.craft === craftId)));
+  $('#briefEyebrow').textContent = c.full + ' · Basis Alpenrand · Piste 36';
+  $('#bigName').textContent = c.big; $('#subName').textContent = c.sub;
+  $('#lede').textContent = c.lede + ' Schiess gegnerische Jets und Sperrballone ab und sammle die Goldmünzen. Ist ein Jet erfasst (rote Raute, «Rakete bereit»), feuert die Leertaste eine wärmesuchende Rakete, sonst die Kanone. Nachladen am Boden bei der Piste.';
+  $('#spec').innerHTML = c.spec.map(([a, b]) => '<div><dt>' + a + '</dt><dd>' + b + '</dd></div>').join('');
+  $('#kPitch').textContent = heli ? 'Vorwärts / rückwärts' : 'Nase hoch / runter';
+  $('#kRoll').textContent = heli ? 'Seitwärts neigen' : 'Rollen links / rechts';
+  $('#kUp').textContent = heli ? (level === 1 ? 'Steigen' : 'Mehr Kollektiv') : 'Mehr Schub';
+  $('#kDn').textContent = heli ? (level === 1 ? 'Sinken' : 'Weniger Kollektiv') : 'Weniger Schub';
+  $('#kYaw').textContent = heli ? 'Heck drehen' : 'Seitenruder';
+  $('#kGear').hidden = $('#kBrake').hidden = heli; $('#kSmoke').hidden = !c.smoke;
+  $('#startHint').innerHTML = heli
+    ? '<b>Abheben:</b> 2 halten, bis der Apache steigt. ↑ neigt die Nase und fliegt vorwärts, ↓ bremst, ← → schieben seitwärts, Q E drehen auf der Stelle. In schneller Fahrt dreht das Heck von selbst in den Fahrtwind. <b>Landen:</b> abbremsen, langsam sinken und gerade aufsetzen.'
+    : '<b>Startablauf:</b> 2 gedrückt halten bis 100 % Schub, loslassen und nochmals 2 für den Nachbrenner (auf Leicht geht der Schub direkt durch). Ab etwa ' + Math.round(c.vs * KT * 1.12) + ' kt mit ↑ sanft ziehen, auf Leicht hebt das Flugzeug von selbst ab. Fahrwerk mit G erst in der Luft einfahren.' + (c.smoke ? ' Mit X schaltest du den Rauch ein.' : '') + ' <b>Landen:</b> Fahrwerk raus, Schub reduzieren, sanft aufsetzen, dann B zum Bremsen.';
+  document.title = c.short + ' Flugsimulator';
+  showLevel();
+}
+function selectCraft(id) {
+  if (!CRAFT[id] || id === craftId) return;
+  craftId = id; jet = craft().model; VS = craft().vs || 62; GH = craft().gh; apProf = null;
+  try { localStorage.setItem('f35craft', id); } catch (e) {}
+  canResume = false; reset(false); showCraft(); showUI();
+}
+document.querySelectorAll('#crafts button').forEach(b => b.addEventListener('click', () => selectCraft(b.dataset.craft)));
+lvlEl.addEventListener('input', () => { level = clamp(+lvlEl.value | 0, 1, 3); try { localStorage.setItem('f35level', level); } catch (e) {} showCraft(); });
 lvlEl.addEventListener('change', () => lvlEl.blur());
-showLevel();
-window.__f35 = { groundAt, P, tel, combat, targets, missiles, sim(n, dt) { for (let i = 0; i < n; i++) if (mode === 'fly') { step(dt); if (mode === 'fly') updateCombat(dt); } telemetry(); return mode; } };
+showCraft();
+window.__f35 = { selectCraft, groundAt, P, tel, combat, targets, missiles, sim(n, dt) { for (let i = 0; i < n; i++) if (mode === 'fly') { step(dt); if (mode === 'fly') updateCombat(dt); } telemetry(); return mode; } };
 tap('#goRwy', () => begin(false)); tap('#goAir', () => begin(true)); tap('#goResume', resume);
 tap('#reRwy', () => begin(false)); tap('#reAir', () => begin(true));
+tap('#laRwy', () => begin(false)); tap('#laAir', () => begin(true));
 tap('#bCam', cycleCam); tap('#bGear', toggleGear); tap('#bSnd', toggleSound); tap('#bPause', togglePause);
 const bb = $('#bBrake');
 bb.addEventListener('pointerdown', e => { btnBrake = true; bb.setAttribute('aria-pressed', 'true'); });
@@ -1605,7 +2292,8 @@ function frame(now) {
     const n = Math.max(1, Math.ceil(dt / (1 / 120)));
     for (let i = 0; i < n && mode === 'fly'; i++) step(dt / n);
     if (mode === 'fly') updateCombat(dt);
-  }
+  } else if (mode === 'auto') { const n = apWarp(); for (let i = 0; i < n && mode === 'auto'; i++) autoStep(dt); }
+  else if (mode === 'landed') egressUpdate(dt);
   telemetry();
   updateModel(dt);
   updateCamera(dt);
@@ -1626,7 +2314,7 @@ function boot(data) {
   showUI();
   requestAnimationFrame(frame);
 }
-try { window.claude?.hot?.snapshot(() => mode === 'crash' ? {} : ({ pos: P.pos.toArray(), q: P.q.toArray(), s: P.s, thr: P.thr, thrCmd: P.thrCmd, gear: P.gear, onGround: P.onGround, hdg: P.hdg, gp: P.gp, camMode, invert })); } catch (e) {}
+try { window.claude?.hot?.snapshot(() => mode !== 'fly' && mode !== 'brief' ? {} : ({ pos: P.pos.toArray(), q: P.q.toArray(), s: P.s, thr: P.thr, thrCmd: P.thrCmd, gear: P.gear, onGround: P.onGround, hdg: P.hdg, gp: P.gp, camMode, invert })); } catch (e) {}
 window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
 })();
 </script>
