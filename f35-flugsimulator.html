@@ -60,7 +60,7 @@ kbd{font:600 11px/1 var(--f-mono);color:var(--ink);border:1px solid rgba(230,239
 .level input{width:100%;accent-color:var(--hud);cursor:pointer}
 .level output{font:600 20px/1 var(--f-display);letter-spacing:.06em;color:var(--ink);text-align:right}
 .crafts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
-.crafts.scen{grid-template-columns:repeat(2,minmax(0,1fr))}
+.crafts.scen{grid-template-columns:repeat(3,minmax(0,1fr))}
 .crafts button{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0;padding:10px 12px;border-radius:3px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--ink);text-align:left}
 .crafts button b{font:800 20px/1 var(--f-display);letter-spacing:.03em;text-transform:uppercase}
 .crafts button span{font:600 10px/1.2 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
@@ -151,6 +151,7 @@ kbd{font:600 11px/1 var(--f-mono);color:var(--ink);border:1px solid rgba(230,239
     <div class="crafts scen" id="scens" role="radiogroup" aria-label="Szenario wählen">
       <button type="button" role="radio" data-scen="0"><b>Alpen</b><span>Basis Alpenrand · Piste 36</span></button>
       <button type="button" role="radio" data-scen="1"><b>Dschungelküste</b><span>Meer · Flugzeugträger</span></button>
+      <button type="button" role="radio" data-scen="2"><b>Nacht</b><span>Lichterstadt am Meer</span></button>
     </div>
     <div class="level"><label for="lvl">Level</label><input id="lvl" type="range" min="1" max="3" step="1" value="1"><output id="lvlOut" for="lvl">Leicht</output></div>
     <p class="hint" id="lvlHint"></p>
@@ -326,7 +327,7 @@ sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -26, right: 26, top: 26, bottom: -26, near: 1, far: 800 });
 sun.shadow.bias = -.0004; sun.shadow.normalBias = .04;
 scene.add(sun, sun.target);
-scene.add(new THREE.HemisphereLight(lin('#cfe0f5'), lin('#5b6650'), .35));
+const hemi = new THREE.HemisphereLight(lin('#cfe0f5'), lin('#5b6650'), .35); scene.add(hemi);
 
 // ---------- Gelände
 {
@@ -1283,7 +1284,7 @@ addEventListener('keydown', e => {
     case 'KeyC': cycleCam(); break;
     case 'KeyP': if (e.shiftKey) { togglePegasus(); break; } togglePause(); break;
     case 'Escape': togglePause(); break;
-    case 'KeyM': toggleSound(); break;
+    case 'KeyM': if (e.shiftKey) { if (mode === 'fly') { combat.ammo = AMMO_MAX; combat.msl = mslCap(); combat.bombs = craft().bombs || 0; toast('Munition aufgefüllt' + (combat.msl ? ', ' + combat.msl + ' Raketen' : '') + (combat.bombs ? ', ' + combat.bombs + (craft().heli ? ' Hellfire' : ' Bomben') : '')); } break; } toggleSound(); break;
     case 'KeyI': invert = !invert; toast(invert ? 'Höhensteuer umgekehrt: ↓ hebt die Nase' : 'Höhensteuer normal: ↑ hebt die Nase'); break;
     case 'Digit2': case 'Numpad2': case 'KeyR': if (P.thrCmd >= .999) P.abPass = true; break;
     case 'KeyL': if (e.shiftKey) startAutoland(); break;
@@ -1372,7 +1373,12 @@ function heliStep(dt) {
   else reloadIfParked();
   P.maxKt = Math.max(P.maxKt, P.s * KT);
 }
+const stepPrev = new V3();
 function step(dt) {
+  stepPrev.copy(P.pos); stepCraft(dt);
+  if (mode === 'fly' && world === 2 && night.built && bridgeCheck(stepPrev, P.pos) === 'crash') crash('In die Brücke geflogen');
+}
+function stepCraft(dt) {
   if (craft().peg) return pegStep(dt);
   if (craft().heli) return heliStep(dt);
   readInput(dt);
@@ -2012,7 +2018,7 @@ function populateWorld() {
   for (const c of coins) scene.remove(c.mesh); coins.length = 0;
   combat.lockTg = null;
   for (let i = 0; i < (world ? Math.max(2, lv().jets - 1) : lv().jets); i++) spawnJet();
-  if (!world) { for (let i = 0; i < MAX_BALLOONS; i++) spawnBalloon(); coinChain(0, -2700, 0, RWY.h + 160, 55, 8, 0); }
+  if (world !== 1) { for (let i = 0; i < MAX_BALLOONS; i++) spawnBalloon(); coinChain(0, -2700, 0, RWY.h + 160, 55, 8, 0); }
   for (let i = 0; i < 6; i++) randomChain();
 }
 function segDist2(a, b, c) {
@@ -2191,7 +2197,14 @@ function jungleH(x, z) {
   const m = 1 - smooth(0, 1100, Math.hypot(dx, dz));
   return h + (RWY.h - h) * m;
 }
-const BH = [{ pos: new V3(1200, 1500, 6000) }, { pos: new V3(2500, 1500, 9000) }];   // Lage des schwarzen Lochs in Welt 0 und 1
+// Schwarze Löcher: Alpen (0) und Dschungelküste (1) führen in die Nachtwelt (2), dort führt je eines zurück
+const WORLD_NAMES = ['Alpen', 'Dschungelküste', 'Nacht'];
+const BH = [
+  { world: 0, to: 2, pos: new V3(1200, 1500, 6000) },
+  { world: 1, to: 2, pos: new V3(2500, 1500, 9000) },
+  { world: 2, to: 0, pos: new V3(-2500, 1600, 6500), tint: '#9fd4ff' },
+  { world: 2, to: 1, pos: new V3(4500, 1600, 6500), tint: '#8dffb0' }
+];
 const BH_R = 200;
 let world = 0;
 const jungle = { group: null, ships: [], built: false };
@@ -2300,7 +2313,7 @@ function buildJungle() {
     placeShip(sh, 0); jungle.ships.push(sh);
   }
   jungle.group = grp; jungle.built = true;
-  const bh = buildBlackHole(BH_R); bh.group.position.copy(BH[1].pos); grp.add(bh.group); BH[1].disk = bh.disk;
+  makePortal(BH[1]); grp.add(BH[1].group);
 }
 const groundAt2 = (x, z) => { const keep = HG; HG = HGT2; const h = groundAt(x, z); HG = keep; return h; };
 const slope2 = (x, z) => Math.abs(groundAt2(x + 15, z) - groundAt2(x - 15, z)) + Math.abs(groundAt2(x, z + 15) - groundAt2(x, z - 15));
@@ -2462,31 +2475,327 @@ fadeEl.style.cssText = 'position:fixed;inset:0;z-index:8;pointer-events:none;bac
 document.body.appendChild(fadeEl);
 function setWorld(i) {
   if (i === 1 && !jungle.built) buildJungle();
-  world = i; HG = i ? HGT2 : HGT; apProf = null;
-  alpsGroup.visible = i === 0; if (jungle.group) jungle.group.visible = i === 1;
+  if (i === 2 && !night.built) buildNight();
+  world = i; HG = [HGT, HGT2, HGT3][i]; apProf = null;
+  alpsGroup.visible = i === 0; if (jungle.group) jungle.group.visible = i === 1; if (night.group) night.group.visible = i === 2;
+  for (const b of BH) if (b.group && b.world !== 1) b.group.visible = b.world === i;
+  NIGHT.apply(i === 2);
   for (const b of bombs) scene.remove(b.mesh); bombs.length = 0;
   for (const f of fireballs) scene.remove(f.sp); fireballs.length = 0;
   populateWorld();
 }
+const portalsHere = () => BH.filter(b => b.world === world);
+function nearestPortal() { let best = null, bd = 1e12; for (const b of portalsHere()) { const d = P.pos.distanceTo(b.pos); if (d < bd) { bd = d; best = b; } } return [best, bd]; }
 function updatePortal(dt) {
   for (const b of BH) if (b.disk) b.disk.rotation.z += dt * .12;
+  NIGHT.follow();
   portal.cool -= dt;
-  const d = P.pos.distanceTo(BH[world].pos);
-  portal.warp = mode === 'fly' ? smooth(900, BH_R, d) : 0;
+  const [near, d] = nearestPortal();
+  portal.warp = mode === 'fly' && near ? smooth(900, BH_R, d) : 0;
   if (portal.phase === 'in') {
     portal.t += dt; fadeEl.style.opacity = Math.min(1, portal.t / .35);
     if (portal.t >= .4) {
-      const other = 1 - world, keepDir = P.dir.clone(), off = P.pos.clone().sub(BH[world].pos);
-      setWorld(other);
-      P.pos.copy(BH[other].pos).addScaledVector(keepDir, BH_R + 120); P.pos.x += off.x * .2; P.pos.z += off.z * .2;
+      const from = world, src = portal.src, keepDir = P.dir.clone(), off = P.pos.clone().sub(src.pos);
+      setWorld(src.to);
+      // Ankunft beim Loch der Zielwelt, das zurück in die Herkunftswelt führt
+      const dst = BH.find(b => b.world === src.to && b.to === from) || BH.find(b => b.world === src.to);
+      P.pos.copy(dst.pos).addScaledVector(keepDir, BH_R + 120); P.pos.x += off.x * .2; P.pos.z += off.z * .2;
+      if (craft().heli) P.vel.copy(keepDir).multiplyScalar(Math.max(P.vel.length(), 30));
       camQ.copy(craft().heli ? camQ : P.q);
       portal.phase = 'out'; portal.t = 0; portal.cool = 5;
-      toast(world ? 'Willkommen an der Dschungelküste: Flugzeugträger und Schlachtschiffe im Osten' : 'Zurück in den Alpen');
+      toast(world === 1 ? 'Willkommen an der Dschungelküste: Flugzeugträger und Schlachtschiffe im Osten' : world === 2 ? 'Nachtwelt: Lichterstadt an der Bucht. Flieg unter den Brücken durch! Blaues Loch: Alpen, grünes: Dschungelküste' : 'Zurück in den Alpen');
     }
   } else if (portal.phase === 'out') {
     portal.t += dt; fadeEl.style.opacity = Math.max(0, 1 - portal.t / .9);
     if (portal.t > .9) { portal.phase = ''; fadeEl.style.opacity = 0; }
-  } else if (mode === 'fly' && portal.cool <= 0 && d < BH_R) { portal.phase = 'in'; portal.t = 0; boom(.6); }
+  } else if (mode === 'fly' && portal.cool <= 0 && near && d < BH_R) { portal.phase = 'in'; portal.t = 0; portal.src = near; boom(.6); }
+}
+
+// ---------- Nachtwelt: die Alpen bei Nacht mit Mond, Sternen und beleuchteten Städten
+const NIGHT = {
+  on: false, group: null, sky: null, save: null,
+  build() {
+    const g = new THREE.Group(); g.visible = false; scene.add(g); this.group = g;
+    const dot = radialTex(['rgba(255,255,255,1)', 'rgba(255,255,255,.6)', 'rgba(255,255,255,0)'], 64);
+    const pts = (arr, color, size) => {
+      const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+      const m = new THREE.Points(geo, new THREE.PointsMaterial({ color: new THREE.Color(color), size, sizeAttenuation: false, map: dot, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+      m.frustumCulled = false; return m;
+    };
+    // Sternenhimmel und Mond, wandern mit der Kamera
+    const sky = new THREE.Group(); g.add(sky); this.sky = sky;
+    const st = [];
+    for (let i = 0; i < 2600; i++) { const u = rnd() * 2 - 1, a = rnd() * 6.283, y = Math.abs(u) * .98 + .02, r = Math.sqrt(1 - y * y); st.push(Math.cos(a) * r * 60000, y * 60000, Math.sin(a) * r * 60000); }
+    sky.add(pts(st, '#e8eeff', 1.8));
+    const bright = []; for (let i = 0; i < 260; i++) { const a = rnd() * 6.283, y = .05 + rnd() * .9, r = Math.sqrt(1 - y * y); bright.push(Math.cos(a) * r * 59000, y * 59000, Math.sin(a) * r * 59000); }
+    sky.add(pts(bright, '#ffffff', 3));
+    const moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: radialTex(['rgba(255,252,236,1)', 'rgba(250,246,226,1)', 'rgba(235,232,215,.9)', 'rgba(200,210,255,.18)', 'rgba(200,210,255,0)'], 256), transparent: true, depthWrite: false, fog: false }));
+    moon.position.set(-.45, .5, -.74).normalize().multiplyScalar(55000); moon.scale.set(5200, 5200, 1); sky.add(moon);
+  },
+  follow() { if (this.on && this.sky) this.sky.position.copy(camera.position); },
+  apply(on) {
+    if (on === this.on) return; this.on = on; this.group.visible = on;
+    const u = skyMat.uniforms;
+    if (on) {
+      this.save = { top: u.top.value.clone(), hor: u.hor.value.clone(), bot: u.bot.value.clone(), sd: u.sunDir.value.clone(), fog: scene.fog.color.clone(), sunC: sun.color.clone(), sunI: sun.intensity, hemiI: hemi.intensity, env: scene.environment, exp: renderer.toneMappingExposure };
+      u.top.value.set('#01030a'); u.hor.value.set('#0c1630'); u.bot.value.set('#04060c'); u.sunDir.value = new V3(0, -1, 0);
+      scene.fog.color.set('#081020'); sun.color.set(lin('#9fb6ff')); sun.intensity = .32; hemi.intensity = .1; scene.environment = null; renderer.toneMappingExposure = .95;
+    } else if (this.save) {
+      const v = this.save; u.top.value.copy(v.top); u.hor.value.copy(v.hor); u.bot.value.copy(v.bot); u.sunDir.value = v.sd;
+      scene.fog.color.copy(v.fog); sun.color.copy(v.sunC); sun.intensity = v.sunI; hemi.intensity = v.hemiI; scene.environment = v.env; renderer.toneMappingExposure = v.exp;
+    }
+    // Wolken in der Nacht nur als dunkle Schatten
+    alpsGroup.traverse(o => { if (o.isSprite) { const m = o.material; if (!m.userData.c0) m.userData.c0 = m.color.clone(); m.color.copy(m.userData.c0).multiplyScalar(on ? .1 : 1); } });
+    skyMat.needsUpdate = true;
+  }
+};
+
+
+// ---------- Nachtwelt: Lichterstadt an einer Meeresbucht mit Brücken, Schiffen und Leuchtturm
+// Eine Bucht zieht sich von der offenen See im Süden nach Norden ins Land, Städte an beiden Ufern,
+// drei beleuchtete Hängebrücken mit 65 m Durchfahrtshöhe. Gebaut beim ersten Besuch.
+const HGT3 = new Float32Array((N + 1) * (N + 1));
+const NCX = z => 4500 + 700 * Math.sin(z / 4300 + .5);
+const NW = z => (650 + 250 * Math.sin(z / 2900 + 1.3)) * smooth(-17500, -14500, z);
+const NCOAST = x => 11500 + 1200 * Math.sin(x / 3500) + 600 * Math.sin(x / 1300 + 2);
+const NDOWN = [[NCX(-4500) - NW(-4500) - 800, -4500], [NCX(500) + NW(500) + 900, 500]];
+function nightCity(x, z) {
+  const cx = NCX(z), w = NW(z);
+  const bw = (cx - w) - x, be = x - (cx + w);
+  let f = 0;
+  if (bw > 0) f = 1 - smooth(2600, 3700, bw); else if (be > 0) f = 1 - smooth(3400, 4700, be);
+  f *= smooth(-13500, -12000, z) * (1 - smooth(8500, 10200, z));
+  const am = (1 - smooth(1500, 2100, Math.abs(x))) * (1 - smooth(2800, 3500, Math.abs(z)));
+  return f * (1 - am);
+}
+function nightH(x, z) {
+  const dc = Math.abs(x - NCX(z)) - NW(z), ds = NCOAST(x) - z, dl = Math.min(dc, ds);
+  let h;
+  if (dl < 0) h = -4 - smooth(0, 400, -dl) * 36;
+  else {
+    const n = fbm(x / 3000 + 90, z / 3000 - 40, 4); let r = 1 - Math.abs(fbm(x / 2400 - 30, z / 2400 + 60, 4)); r *= r;
+    h = 3 + smooth(0, 120, dl) * 8 + smooth(2500, 9000, dl) * (150 + n * 350 + r * 700);
+    h *= 1 - .9 * nightCity(x, z);
+  }
+  const dd = Math.hypot(x, z) / HALF;
+  h = h * (1 - smooth(.8, .97, dd)) - 40 * smooth(.8, .97, dd);
+  const dx = Math.max(0, Math.abs(x) - 380), dz = Math.max(0, Math.abs(z) - 1950);
+  const m = 1 - smooth(0, 1100, Math.hypot(dx, dz));
+  return h + (RWY.h - h) * m;
+}
+const night = { built: false, group: null, bridges: [], boxes: [], ships: [], cars: null, carData: [], beam: null, passed: new Set() };
+
+function winTex(cols, rows, lit, bg, warm) {
+  const cv = document.createElement('canvas'); cv.width = cols * 10; cv.height = rows * 8; const c = cv.getContext('2d');
+  c.fillStyle = bg; c.fillRect(0, 0, cv.width, cv.height);
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const on = rnd() < lit, t = rnd();
+    c.fillStyle = on ? (t < warm ? 'rgb(255,' + (200 + rnd() * 40 | 0) + ',' + (120 + rnd() * 60 | 0) + ')' : 'rgb(' + (190 + rnd() * 40 | 0) + ',220,255)') : 'rgb(24,30,40)';
+    c.fillRect(x * 10 + 2, y * 8 + 2, 6, 4);
+  }
+  const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+}
+function nightPts(arr, color, size, att, colors) {
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+  if (colors) geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  const m = new THREE.Points(geo, new THREE.PointsMaterial({ color: new THREE.Color(color), size, sizeAttenuation: !!att, map: NIGHT_DOT, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, vertexColors: !!colors }));
+  m.frustumCulled = false; return m;
+}
+const NIGHT_DOT = radialTex(['rgba(255,255,255,1)', 'rgba(255,255,255,.55)', 'rgba(255,255,255,0)'], 64);
+
+function buildNight() {
+  const grp = new THREE.Group(); scene.add(grp);
+  const geo = new THREE.PlaneGeometry(WORLD, WORLD, N, N); geo.rotateX(-Math.PI / 2);
+  const pa = geo.attributes.position;
+  for (let i = 0; i < pa.count; i++) { const h = nightH(pa.getX(i), pa.getZ(i)); pa.setY(i, h); HGT3[i] = h; }
+  geo.computeVertexNormals();
+  HG = HGT3;
+  // Bodentextur dunkel, dazu eine Leuchtkarte mit glühenden Strassenrastern
+  const S = 2048, step = WORLD / S, tp = v => (v + HALF) / WORLD * S;
+  const cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d'), img = g.createImageData(S, S), D = img.data;
+  const ev = document.createElement('canvas'); ev.width = ev.height = S; const e = ev.getContext('2d');
+  e.fillStyle = '#000'; e.fillRect(0, 0, S, S);
+  let o = 0;
+  for (let py = 0; py < S; py++) {
+    const z = -HALF + (py + .5) * step;
+    for (let px = 0; px < S; px++, o += 4) {
+      const x = -HALF + (px + .5) * step, h = groundAt(x, z), gr = hash(px, py), cf = h > 1 ? nightCity(x, z) : 0;
+      let r, gg, b;
+      if (h < 0) { r = 14; gg = 30; b = 44; }
+      else if (h < 5) { r = 120; gg = 110; b = 88; }
+      else { const v = vnoise(x / 700, z / 700) * .5 + .5; r = 46 + v * 20; gg = 64 + v * 26; b = 38 + v * 10; if (h > 700) { r += 30; gg += 20; b += 20; } }
+      if (cf > 0) { r += (72 - r) * cf; gg += (74 - gg) * cf; b += (80 - b) * cf; }
+      const k = .9 + gr * .2; D[o] = r * k; D[o + 1] = gg * k; D[o + 2] = b * k; D[o + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  // glühende Strassen: Raster in der Stadt, Uferpromenaden, Ausfallstrassen
+  const B = 120;
+  for (let x = -6000; x <= 14000; x += B) for (let z = -14000; z <= 11000; z += B) {
+    const f = nightCity(x, z); if (f < .12 || groundAt(x, z) < 1) continue;
+    e.fillStyle = 'rgba(255,170,80,' + (.06 + .2 * f).toFixed(2) + ')';
+    e.fillRect(tp(x), tp(z), Math.max(1, B / step), 1); e.fillRect(tp(x), tp(z), 1, Math.max(1, B / step));
+  }
+  e.strokeStyle = 'rgba(255,215,150,.45)'; e.lineWidth = 1.2;
+  for (const side of [-1, 1]) {
+    e.beginPath();
+    for (let z = -14000; z <= 10500; z += 150) { const x = NCX(z) + side * (NW(z) + 70); if (z === -14000) e.moveTo(tp(x), tp(z)); else e.lineTo(tp(x), tp(z)); }
+    e.stroke();
+  }
+  e.strokeStyle = 'rgba(255,200,130,.4)'; e.lineWidth = 1.1;
+  for (const [x0, z0, x1, z1] of [[-400, -2600, -9000, -9000], [-400, 2600, -8000, 9000], [NDOWN[1][0], 500, 15000, -2000], [NDOWN[1][0], 500, 14000, 7000]]) { e.beginPath(); e.moveTo(tp(x0), tp(z0)); e.quadraticCurveTo(tp((x0 + x1) / 2 + 800), tp((z0 + z1) / 2), tp(x1), tp(z1)); e.stroke(); }
+  const tex = new THREE.CanvasTexture(cv); tex.encoding = THREE.sRGBEncoding; tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  const etex = new THREE.CanvasTexture(ev); etex.encoding = THREE.sRGBEncoding;
+  const terrain = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, emissive: new THREE.Color(1, 1, 1), emissiveMap: etex, emissiveIntensity: .9, roughness: .95 }));
+  terrain.receiveShadow = true; grp.add(terrain);
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(400000, 400000), new THREE.MeshStandardMaterial({ color: lin('#0b1a2b'), roughness: .08, metalness: .3, transparent: true, opacity: .93 }));
+  sea.rotation.x = -Math.PI / 2; sea.renderOrder = 1; grp.add(sea);
+  // Flughafen an der gewohnten Stelle mit Befeuerung
+  const strip = new THREE.Mesh(new THREE.PlaneGeometry(RWY.w, RWY.len), new THREE.MeshStandardMaterial({ map: runwayTexture(), roughness: .9 }));
+  strip.rotation.x = -Math.PI / 2; strip.position.set(0, RWY.h + .14, 0); grp.add(strip);
+  const rl = [], rc = [];
+  for (let z = -1500; z <= 1500; z += 50) for (const x of [-23.5, 23.5]) { rl.push(x, RWY.h + .6, z); rc.push(1, .93, .75); }
+  for (let x = -21; x <= 21; x += 6) { rl.push(x, RWY.h + .6, 1502); rc.push(.2, 1, .4); rl.push(x, RWY.h + .6, -1502); rc.push(1, .2, .15); }
+  for (let z = 1560; z <= 2400; z += 60) for (const x of [-6, 0, 6]) { rl.push(x, RWY.h + 3, z); rc.push(1, 1, 1); }
+  grp.add(nightPts(rl, '#ffffff', 4, false, rc));
+
+  // Gebäude: drei Höhenklassen, Fenster leuchten über eine Emissions-Textur
+  const classes = [[1, .55, '#20242b', 4500], [3, .5, '#1c2128', 3000], [8, .45, '#161b22', 900]].map(([k, lit, bg, max]) => {
+    const t = winTex(6, 16, lit, bg, .7);
+    const bg2 = new THREE.BoxGeometry(1, 1, 1); const uv = bg2.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * k);
+    const mesh = new THREE.InstancedMesh(bg2, new THREE.MeshStandardMaterial({ map: t, emissive: new THREE.Color(1, 1, 1), emissiveMap: t, emissiveIntensity: 1, roughness: .6 }), max);
+    mesh.count = 0; mesh.frustumCulled = false; grp.add(mesh); return mesh;
+  });
+  const m4 = new THREE.Matrix4(), q = new Qt(), s = new V3(), p = new V3(), col = new THREE.Color(), AYn = new V3(0, 1, 0);
+  const lamps = [], roofL = [], roofC = [];
+  for (let x = -6000; x <= 14000; x += B) for (let z = -14000; z <= 11000; z += B) {
+    const f = nightCity(x, z); if (f < .15 || rnd() > f * 1.1) continue;
+    let tall = 0; for (const [dx, dz] of NDOWN) tall = Math.max(tall, Math.exp(-((x - dx) ** 2 + (z - dz) ** 2) / 1400 ** 2));
+    for (let k = 0; k < (f > .6 ? 2 : 1); k++) {
+      const bx = x + B / 2 + (rnd() - .5) * 50, bz = z + B / 2 + (rnd() - .5) * 50, h = groundAt(bx, bz);
+      if (h < 2 || slopeAt(bx, bz) > 6) continue;
+      const ht = Math.max(10 + rnd() * 30 * f, tall * (60 + rnd() * 170)), w = 34 + rnd() * 36 + tall * 12, d = 34 + rnd() * 36 + tall * 12;
+      const cl = ht > 60 ? 2 : ht > 22 ? 1 : 0, mesh = classes[cl];
+      if (mesh.count >= mesh.instanceMatrix.count) continue;
+      q.setFromAxisAngle(AYn, (rnd() < .5 ? 0 : Math.PI / 2)); p.set(bx, h - 2 + ht / 2, bz); s.set(w, ht + 2, d);
+      mesh.setMatrixAt(mesh.count, m4.compose(p, q, s)); mesh.setColorAt(mesh.count++, col.setHSL(.58 + rnd() * .1, .1, .75 + rnd() * .25));
+      if (ht > 90) { roofL.push(bx, h + ht + 2, bz); roofC.push(1, .15, .1); }
+    }
+    for (let i = 0; i < 2; i++) { const lx = x + i * B / 2, lz = z + (1 - i) * B / 2, h = groundAt(lx, lz); if (h > 1 && rnd() < .8) lamps.push(lx, h + 7, lz); }
+  }
+  for (const m of classes) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+  grp.add(nightPts(lamps, '#e0a050', 2.4, false), nightPts(roofL, '#ff3020', 5, false, roofC));
+  // vereinzelte Häuser in den Hügeln
+  const hills = [];
+  for (let i = 0; i < 6000; i++) { const x = (rnd() * 2 - 1) * 18000, z = (rnd() * 2 - 1) * 18000, h = groundAt(x, z); if (h > 8 && h < 700 && nightCity(x, z) < .1) hills.push(x, h + 4, z); }
+  grp.add(nightPts(hills, '#ffcf8a', 2.2, false));
+
+  // Hängebrücken: Pylone, leuchtende Tragseile, Hänger, Fahrbahnlichter, Autos
+  const deckMat = new THREE.MeshStandardMaterial({ color: lin('#3a3e44'), roughness: .8 });
+  const carP = [], carC = [];
+  for (const [zb, towerCol, cableCol, lampCol] of [[-9000, '#b4382c', '#ff9a6a', '#ffcf8a'], [-3500, '#d8dde3', '#9fd8ff', '#e8f4ff'], [2500, '#c9a24a', '#ffe08a', '#ffd88a']]) {
+    const cx = NCX(zb), w = NW(zb), xa = cx - w - 260, xb = cx + w + 260, len = xb - xa, DY = 70;
+    const tower = new THREE.MeshStandardMaterial({ color: lin(towerCol), roughness: .6, emissive: lin(towerCol), emissiveIntensity: .25 });
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(len, 4, 28), deckMat); deck.position.set((xa + xb) / 2, DY, zb); grp.add(deck);
+    night.boxes.push({ x0: xa, x1: xb, y0: DY - 5, y1: DY + 5, z0: zb - 16, z1: zb + 16 });
+    const t1 = cx - w * .78, t2 = cx + w * .78, TH = 200;
+    for (const tx of [t1, t2]) {
+      for (const sz of [-1, 1]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(9, TH, 7), tower); leg.position.set(tx, TH / 2 - 10, zb + sz * 13); grp.add(leg); }
+      for (const y of [DY + 25, TH - 25]) { const cb = new THREE.Mesh(new THREE.BoxGeometry(8, 7, 26), tower); cb.position.set(tx, y, zb); grp.add(cb); }
+      night.boxes.push({ x0: tx - 7, x1: tx + 7, y0: -20, y1: TH, z0: zb - 18, z1: zb + 18 });
+    }
+    for (const px of [xa + 40, xb - 40]) { const pier = new THREE.Mesh(new THREE.BoxGeometry(14, DY, 20), tower); pier.position.set(px, DY / 2, zb); grp.add(pier); }
+    const cm = new THREE.MeshBasicMaterial({ color: lin(cableCol) });
+    const cable = x => x < t1 ? DY + 4 + (TH - DY - 4) * (x - xa) / (t1 - xa) : x > t2 ? DY + 4 + (TH - DY - 4) * (xb - x) / (xb - t2) : DY + 18 + (TH - DY - 18) * ((x - cx) / (t2 - cx)) ** 2;
+    const hang = [];
+    for (const sz of [-12, 12]) {
+      const pts = []; for (let x = xa; x <= xb; x += 25) pts.push(new V3(x, cable(x), zb + sz));
+      grp.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 160, 1.1, 6), cm));
+      for (let x = t1 + 20; x < t2; x += 22) hang.push(x, DY + 2, zb + sz, x, cable(x), zb + sz);
+    }
+    const hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.Float32BufferAttribute(hang, 3));
+    grp.add(new THREE.LineSegments(hg, new THREE.LineBasicMaterial({ color: lin(cableCol), transparent: true, opacity: .55 })));
+    const dl = [], dc = [];
+    for (let x = xa; x <= xb; x += 18) for (const sz of [-14, 14]) { dl.push(x, DY + 3.5, zb + sz); }
+    for (const tx of [t1, t2]) for (const sz of [-13, 13]) { dc.push(tx, TH - 9, zb + sz); }
+    grp.add(nightPts(dl, lampCol, 3, false), nightPts(dc, '#ff2a1a', 6, false));
+    for (let i = 0; i < 70; i++) { const dir = i % 2 ? 1 : -1; night.carData.push({ x0: xa, x1: xb, x: xa + rnd() * len, dir, z: zb + dir * 5, y: DY + 3, v: 22 + rnd() * 10 }); carP.push(0, 0, 0); carC.push(...(dir > 0 ? [1, .95, .8] : [1, .15, .1])); }
+    night.bridges.push({ zb, xa, xb, t1, t2, DY });
+  }
+  night.cars = nightPts(carP, '#ffffff', 3.4, false, carC); grp.add(night.cars);
+
+  // Leuchtturm auf der westlichen Landzunge an der Buchteinfahrt
+  {
+    let lx = NCX(10500) - NW(10500) - 400, lz = 10800;
+    for (let i = 0; i < 40 && groundAt(lx, lz) < 4; i++) lx -= 80;
+    const h = groundAt(lx, lz);
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(4, 6, 40, 14), new THREE.MeshStandardMaterial({ color: lin('#e8e4dc'), roughness: .6 })); t.position.set(lx, h + 20, lz); grp.add(t);
+    const bm = new THREE.ConeGeometry(60, 1500, 24, 1, true); bm.translate(0, -750, 0); bm.rotateZ(Math.PI / 2);
+    const beam = new THREE.Mesh(bm, new THREE.MeshBasicMaterial({ color: new THREE.Color('#fff2c8'), transparent: true, opacity: .13, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+    const piv = new THREE.Group(); piv.position.set(lx, h + 42, lz); piv.add(beam); grp.add(piv); night.beam = piv;
+    grp.add(nightPts([lx, h + 42, lz], '#fff6d0', 14, false));
+  }
+
+  // beleuchtete Schiffe in der Bucht: Kreuzfahrtschiffe, Frachter, Fähren
+  const SH = [['cruise', -9000, 1, -180], ['cargo', -2000, -1, 200], ['cruise', 6000, -1, 160], ['ferry', -6000, 1, 120], ['cargo', 9000, 1, -220], ['ferry', 1500, -1, -100]];
+  for (const [type, z, dir, lane] of SH) {
+    const mesh = buildNightShip(type); grp.add(mesh);
+    night.ships.push({ mesh, z, dir, lane, v: type === 'ferry' ? 9 : 6, type });
+  }
+  night.group = grp; night.built = true;
+  const bh = BH.filter(b => b.world === 2); for (const b of bh) if (b.group) b.group.visible = true;
+}
+function buildNightShip(type) {
+  const g = new THREE.Group(), add = kit(g);
+  const cruise = type === 'cruise', ferry = type === 'ferry';
+  const L = cruise ? 140 : ferry ? 55 : 110, Bm = cruise ? 17 : ferry ? 10 : 16;
+  const hull = new THREE.MeshStandardMaterial({ color: lin(cruise || ferry ? '#e9ecef' : '#5a2a2a'), roughness: .6 });
+  const deck = new THREE.MeshStandardMaterial({ color: lin('#4a4f55'), roughness: .8 });
+  add(hullGeo([[0, -L], [Bm * .7, -L * .7], [Bm, -L * .25], [Bm, L * .8], [Bm * .8, L], [-Bm * .8, L], [-Bm, L * .8], [-Bm, -L * .25], [-Bm * .7, -L * .7]], -6, 10), [deck, hull]);
+  if (cruise || ferry) {
+    const t = winTex(24, 4, .8, '#e9ecef', .85);
+    const sup = new THREE.MeshStandardMaterial({ map: t, emissive: new THREE.Color(1, 1, 1), emissiveMap: t, emissiveIntensity: 1, roughness: .5 });
+    const levels = cruise ? 5 : 2;
+    for (let i = 0; i < levels; i++) { const ln = L * (1.55 - i * .12); add(new THREE.BoxGeometry(Bm * 1.8, 5, ln), sup, 0, 12.5 + i * 5, L * .05 - i * 3); }
+    if (cruise) add(new THREE.CylinderGeometry(4, 5, 12, 12), new THREE.MeshStandardMaterial({ color: lin('#b8202c'), roughness: .6 }), 0, 12.5 + levels * 5 + 4, L * .35);
+  } else {
+    const cc = ['#2e6fb5', '#c64b2d', '#d9a13b', '#3e8a4c', '#8a8f96'];
+    for (let r = 0; r < 7; r++) for (let c = 0; c < 3; c++) { const hh = 2 + (rnd() * 3 | 0); add(new THREE.BoxGeometry(Bm * .55, hh * 2.6, 13), new THREE.MeshStandardMaterial({ color: lin(cc[(rnd() * 5) | 0]), roughness: .7 }), (c - 1) * Bm * .6, 10 + hh * 1.3, -L * .7 + r * 15); }
+    const t = winTex(8, 4, .7, '#d8d6d0', .9);
+    add(new THREE.BoxGeometry(Bm * 1.6, 16, 14), new THREE.MeshStandardMaterial({ map: t, emissive: new THREE.Color(1, 1, 1), emissiveMap: t, roughness: .5 }), 0, 18, L * .72);
+  }
+  const lp = [], lc = [];
+  for (let z = -L * .9; z <= L * .9; z += 9) for (const sx of [-1, 1]) { lp.push(sx * Bm * .95, 10.6, z); lc.push(1, .9, .7); }
+  lp.push(0, cruise ? 50 : 32, -L * .4); lc.push(1, 1, 1); lp.push(-Bm, 11, -L * .2); lc.push(1, .1, .1); lp.push(Bm, 11, -L * .2); lc.push(.1, 1, .3);
+  g.add(nightPts(lp, '#ffffff', 2.6, false, lc));
+  const wake = new THREE.Mesh(new THREE.PlaneGeometry(Bm * 2.6, 220), wakeMat()); wake.material.opacity = .45; wake.rotation.x = -Math.PI / 2; wake.position.set(0, .3, L + 110); g.add(wake);
+  return g;
+}
+const cpv = new V3();
+function updateNight(dt) {
+  if (world !== 2 || !night.built) return;
+  if (night.beam) night.beam.rotation.y += dt * .9;
+  for (const sh of night.ships) {
+    sh.z += sh.dir * -sh.v * dt;
+    if (sh.z < -13500) { sh.z = -13500; sh.dir = -1; } else if (sh.z > 16000) { sh.z = 16000; sh.dir = 1; }
+    const x = NCX(sh.z) + sh.lane * (sh.dir > 0 ? 1 : -1), x2 = NCX(sh.z - sh.dir * 40) + sh.lane * (sh.dir > 0 ? 1 : -1);
+    sh.mesh.position.set(x, 0, sh.z);
+    sh.mesh.rotation.y = -Math.atan2(x2 - x, sh.dir * 40);
+  }
+  const pa = night.cars.geometry.attributes.position;
+  night.carData.forEach((c, i) => { c.x += c.dir * c.v * dt; if (c.x > c.x1) c.x = c.x0; else if (c.x < c.x0) c.x = c.x1; pa.setXYZ(i, c.x, c.y, c.z); });
+  pa.needsUpdate = true;
+}
+// Kollision mit Brückenteilen und Bonus für das Unterfliegen
+function bridgeCheck(prev, pos) {
+  for (const b of night.boxes) if (pos.x > b.x0 && pos.x < b.x1 && pos.y > b.y0 && pos.y < b.y1 && pos.z > b.z0 && pos.z < b.z1) return 'crash';
+  for (const br of night.bridges) {
+    if ((prev.z - br.zb) * (pos.z - br.zb) < 0 && pos.x > br.xa && pos.x < br.xb && pos.y < br.DY - 4) {
+      const key = br.zb + ':' + Math.round(performance.now() / 4000);
+      if (!night.passed.has(key)) { night.passed.add(key); combat.score += 50; toast('Unter der Brücke durch, +50'); ding(); }
+    }
+  }
+  return null;
 }
 
 // ---------- Pegasus (geheim, Shift+P): geflügeltes Pferd, Nase nach −z, Hufe auf Bodenhöhe −gh
@@ -2689,7 +2998,13 @@ CRAFT.peg = { short: 'Pegasus', tag: 'geheim', full: 'Pegasus', big: 'Pegasus', 
   spec: [['Abheben', 'aus dem Stand'], ['Wendekreis', 'fast null'], ['Höchstgeschw.', '620 kt'], ['Bewaffnung', 'Feuerbälle']],
   lede: 'Das schwarze geflügelte Pferd: sehr schnell, wendet fast auf der Stelle und hebt aus dem Stand ab. Statt zu schiessen spuckt es Feuerbälle, die den nächsten Feind im Bild treffen.' };
 CRAFT.peg.model.group.visible = false; scene.add(CRAFT.peg.model.group);
-{ const b = buildBlackHole(BH_R); b.group.position.copy(BH[0].pos); alpsGroup.add(b.group); BH[0].disk = b.disk; }
+function makePortal(b) {
+  const h = buildBlackHole(BH_R); h.group.position.copy(b.pos); b.group = h.group; b.disk = h.disk;
+  if (b.tint) h.group.children[2].material.color.set(b.tint);
+  scene.add(h.group); h.group.visible = b.world === 1 || b.world === world;
+}
+makePortal(BH[0]); makePortal(BH[2]); makePortal(BH[3]);
+NIGHT.build();
 
 // ---------- HUD
 const hud = $('#hud'), hc = hud.getContext('2d');
@@ -2808,7 +3123,7 @@ function drawHUD() {
     const d = sh.pos.distanceTo(P.pos); if (d > 16000 || d < 500) continue;
     mark(cv4.copy(sh.pos).setY(sh.top * .6), '#ffb648', sh.name.toUpperCase() + ' ' + (d / 1000).toFixed(1) + ' · ' + Math.max(0, Math.round(sh.hp / sh.maxHp * 100)) + '%', clamp(9000 / d, 12, 40));
   }
-  { const d = BH[world].pos.distanceTo(P.pos); if (d < 20000 && d > BH_R * 1.6) mark(BH[world].pos, '#c9a2ff', 'SCHWARZES LOCH ' + (d / 1000).toFixed(1), clamp(60000 / d, 14, 60)); }
+  for (const b of portalsHere()) { const d = b.pos.distanceTo(P.pos); if (d < 20000 && d > BH_R * 1.6) mark(b.pos, b.tint || '#c9a2ff', 'LOCH → ' + WORLD_NAMES[b.to].toUpperCase() + ' ' + (d / 1000).toFixed(1), clamp(60000 / d, 14, 60)); }
   if (craft().bombs && combat.bombs > 0 && !craft().heli && !P.onGround) {
     const ip = predictImpact();
     if (ip) {
@@ -2935,7 +3250,7 @@ function drawRadar(c, small) {
     const e = edge(toScreen(sh.pos.x, sh.pos.z), R - 4); c.fillStyle = e[2] ? 'rgba(255,182,72,.5)' : '#ffb648';
     c.save(); c.translate(ox + e[0], oy + e[1]); c.rotate(sh.hdg - h); c.fillRect(-2, -5, 4, 10); c.restore();
   }
-  { const e = edge(toScreen(BH[world].pos.x, BH[world].pos.z), R - 5); c.strokeStyle = '#c9a2ff'; c.lineWidth = 2; c.beginPath(); c.arc(ox + e[0], oy + e[1], e[2] ? 3 : 5, 0, Math.PI * 2); c.stroke(); c.lineWidth = 1.2; }
+  for (const b of portalsHere()) { const e = edge(toScreen(b.pos.x, b.pos.z), R - 5); c.strokeStyle = b.tint || '#c9a2ff'; c.lineWidth = 2; c.beginPath(); c.arc(ox + e[0], oy + e[1], e[2] ? 3 : 5, 0, Math.PI * 2); c.stroke(); c.lineWidth = 1.2; }
   // Münzen
   c.fillStyle = '#ffd25a';
   for (const k of coins) { const p = toScreen(k.pos.x, k.pos.z); if (Math.hypot(p[0], p[1]) < R) c.fillRect(ox + p[0] - 1.5, oy + p[1] - 1.5, 3, 3); }
@@ -3044,7 +3359,7 @@ function showUI() {
   $('#bCam').firstChild.textContent = 'Kamera: ' + camNames[camMode];
 }
 let scen = 0;
-try { if (localStorage.getItem('f35scen') === '1') scen = 1; } catch (e) {}
+try { const v = +localStorage.getItem('f35scen'); if (v === 1 || v === 2) scen = v; } catch (e) {}
 function resetShips() {
   if (!jungle.built) return;
   for (const sh of jungle.ships) { sh.alive = true; sh.hp = sh.maxHp; sh.sink = 0; sh.respawn = 0; sh.mesh.visible = true; placeShip(sh, 0); }
@@ -3064,7 +3379,8 @@ function startJungle(air) {
 }
 function begin(air) {
   reset(air);
-  if (scen === 1) startJungle(air); mode = 'fly'; canResume = true; camMode = camMode === 2 ? 0 : camMode; smokeOn = false;
+  if (scen === 1) startJungle(air); else if (scen === 2) setWorld(2);
+  mode = 'fly'; canResume = true; camMode = camMode === 2 ? 0 : camMode; smokeOn = false;
   if (!AC) { initAudio(); if (AC) { soundOn = true; AC.resume(); $('#bSnd').setAttribute('aria-pressed', 'true'); } }
   showUI();
   if (scen === 1 && !air) return toast(craft().heli ? 'Auf dem Träger. 2 halten zum Abheben, die Flotte liegt rundherum' : 'Auf dem Träger. Vollschub mit 2 löst das Katapult aus, am Bug hebst du ab');
@@ -3092,12 +3408,12 @@ function showLevel() { lvlEl.value = level; $('#lvlOut').textContent = lv().name
 function showCraft() {
   const c = craft(), heli = !!c.heli;
   document.querySelectorAll('#crafts button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.craft === craftId)));
-  $('#briefEyebrow').textContent = c.full + (scen ? ' · Dschungelküste · Flugzeugträger' : ' · Basis Alpenrand · Piste 36');
+  $('#briefEyebrow').textContent = c.full + (scen === 1 ? ' · Dschungelküste · Flugzeugträger' : scen === 2 ? ' · Lichterstadt am Meer · Piste 36' : ' · Basis Alpenrand · Piste 36');
   document.querySelectorAll('#scens button').forEach(b => b.setAttribute('aria-checked', String(+b.dataset.scen === scen)));
-  $('#goRwy').textContent = scen ? 'Vom Flugzeugträger starten' : 'Von der Piste starten';
-  $('#reRwy').textContent = $('#laRwy').textContent = scen ? 'Neu vom Träger' : 'Neu von der Piste';
+  $('#goRwy').textContent = scen === 1 ? 'Vom Flugzeugträger starten' : 'Von der Piste starten';
+  $('#reRwy').textContent = $('#laRwy').textContent = scen === 1 ? 'Neu vom Träger' : 'Neu von der Piste';
   $('#bigName').textContent = c.big; $('#subName').textContent = c.sub;
-  $('#lede').textContent = c.lede + ' Schiess gegnerische Jets und Sperrballone ab und sammle die Goldmünzen.' + (c.mslMax ? ' Ist ein Jet erfasst (rote Raute, «Rakete bereit»), feuert die Leertaste eine wärmesuchende Rakete, sonst die Kanone.' : ' Die Leertaste feuert die Maschinengewehre.') + ' Nachladen am Boden bei der Piste. Das schwarze Loch südlich der Piste führt an eine Dschungelküste mit Flugzeugträger und Schlachtschiffen, die du bombardieren kannst (V). Bomben, die ins Meer fallen, laufen als Torpedo weiter und steuern das nächste Schiff voraus an.';
+  $('#lede').textContent = c.lede + ' Schiess gegnerische Jets und Sperrballone ab und sammle die Goldmünzen.' + (c.mslMax ? ' Ist ein Jet erfasst (rote Raute, «Rakete bereit»), feuert die Leertaste eine wärmesuchende Rakete, sonst die Kanone.' : ' Die Leertaste feuert die Maschinengewehre.') + ' Nachladen am Boden bei der Piste. Das schwarze Loch südlich der Piste und jenes an der Dschungelküste führen in die Nachtwelt, eine Lichterstadt an einer Meeresbucht mit beleuchteten Schiffen und Brücken, unter denen du durchfliegen kannst. Von dort geht es durch das blaue Loch in die Alpen und durch das grüne an die Dschungelküste mit Flugzeugträger und Schlachtschiffen, die du bombardieren kannst (V). Shift+M füllt die Munition in der Luft auf. Bomben, die ins Meer fallen, laufen als Torpedo weiter und steuern das nächste Schiff voraus an.';
   $('#spec').innerHTML = c.spec.map(([a, b]) => '<div><dt>' + a + '</dt><dd>' + b + '</dd></div>').join('');
   $('#kPitch').textContent = heli ? 'Vorwärts / rückwärts' : 'Nase hoch / runter';
   $('#kRoll').textContent = heli ? 'Seitwärts neigen' : 'Rollen links / rechts';
@@ -3118,7 +3434,7 @@ function selectCraft(id) {
   if (!CRAFT[id] || id === craftId) return;
   craftId = id; jet = craft().model; VS = craft().vs || 62; GH = craft().gh; apProf = null;
   try { localStorage.setItem('f35craft', id); } catch (e) {}
-  canResume = false; reset(false); if (scen === 1) startJungle(true); showCraft(); showUI();
+  canResume = false; reset(false); if (scen === 1) startJungle(true); else if (scen === 2) setWorld(2); showCraft(); showUI();
 }
 document.querySelectorAll('#crafts button').forEach(b => b.addEventListener('click', () => selectCraft(b.dataset.craft)));
 function selectScen(i) {
@@ -3126,13 +3442,14 @@ function selectScen(i) {
   scen = i; try { localStorage.setItem('f35scen', String(i)); } catch (e) {}
   canResume = false; reset(false);
   if (scen === 1) startJungle(true);   // Vorschau: Kamera kreist über der Küste
+  else if (scen === 2) setWorld(2);
   showCraft(); showUI();
 }
 document.querySelectorAll('#scens button').forEach(b => b.addEventListener('click', () => selectScen(+b.dataset.scen)));
 lvlEl.addEventListener('input', () => { level = clamp(+lvlEl.value | 0, 1, 3); try { localStorage.setItem('f35level', level); } catch (e) {} showCraft(); });
 lvlEl.addEventListener('change', () => lvlEl.blur());
 showCraft();
-window.__f35 = { get fireballs() { return fireballs; }, selectScen, setWorld, jungle, bombs, BH, portal, dropBomb, get world() { return world; }, selectCraft, groundAt, P, tel, combat, targets, missiles, sim(n, dt) { for (let i = 0; i < n; i++) { if (mode === 'fly') { step(dt); if (mode === 'fly') { updateCombat(dt); updateBombs(dt); updateFireballs(dt); } } updateShips(dt); updatePortal(dt); } telemetry(); return mode; } };
+window.__f35 = { night, get fireballs() { return fireballs; }, selectScen, setWorld, jungle, bombs, BH, portal, dropBomb, get world() { return world; }, selectCraft, groundAt, P, tel, combat, targets, missiles, sim(n, dt) { for (let i = 0; i < n; i++) { if (mode === 'fly') { step(dt); if (mode === 'fly') { updateCombat(dt); updateBombs(dt); updateFireballs(dt); } } updateShips(dt); updateNight(dt); updatePortal(dt); } telemetry(); return mode; } };
 tap('#goRwy', () => begin(false)); tap('#goAir', () => begin(true)); tap('#goResume', resume);
 tap('#reRwy', () => begin(false)); tap('#reAir', () => begin(true));
 tap('#laRwy', () => begin(false)); tap('#laAir', () => begin(true));
@@ -3184,7 +3501,7 @@ function frame(now) {
     if (mode === 'fly') { updateCombat(dt); updateBombs(dt); updateFireballs(dt); }
   } else if (mode === 'auto') { const n = apWarp(); for (let i = 0; i < n && mode === 'auto'; i++) autoStep(dt); }
   else if (mode === 'landed') egressUpdate(dt);
-  updateShips(dt); updatePortal(dt);
+  updateShips(dt); updateNight(dt); updatePortal(dt);
   telemetry();
   updateModel(dt);
   updateCamera(dt);
@@ -3197,6 +3514,7 @@ function frame(now) {
 function boot(data) {
   reset(false);
   if (scen === 1 && !(data && data.pos)) startJungle(true);
+  else if (scen === 2) setWorld(2);
   if (data && data.pos) {
     P.pos.fromArray(data.pos); P.q.fromArray(data.q);
     Object.assign(P, { s: data.s, thr: data.thr, thrCmd: data.thrCmd, gear: data.gear, gearAnim: data.gear ? 1 : 0, onGround: data.onGround, hdg: data.hdg, gp: data.gp });
