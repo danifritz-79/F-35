@@ -179,7 +179,7 @@ kbd{font:600 11px/1 var(--f-mono);color:var(--ink);border:1px solid rgba(230,239
 
 <section id="landed" class="overlay" hidden aria-labelledby="landedTitle">
   <div class="card">
-    <p class="eyebrow">Mission beendet · Piste 36</p>
+    <p class="eyebrow" id="landedEyebrow">Mission beendet · Piste 36</p>
     <h2 id="landedTitle">Sicher gelandet</h2>
     <p id="landedStats"></p>
     <div class="actions">
@@ -1228,6 +1228,7 @@ function reset(air) {
     if (air) { P.pos.y = Math.max(groundAt(0, 14000), 0) + 450; P.vel.set(0, 0, -40); }
   }
   if (world) setWorld(0);
+  pipStop();
   portal.phase = ''; portal.cool = 0; fadeEl.style.opacity = 0;
   for (const k in CRAFT) CRAFT[k].model.group.visible = false;
   jet.group.visible = true;
@@ -1719,9 +1720,19 @@ function apProfile() {
 }
 const apAlt = z => { const f = clamp((z - AP_Z0) / AP_STEP, 0, apProf.length - 1.001), i = f | 0; return apProf[i] + (apProf[i + 1] - apProf[i]) * (f - i); };
 const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
-const ap = { phase: '', wps: [], t: 0, hdg: 0, gam: 0, bank: 0, prevD: Infinity };
+const ap = { car: null, phase: '', wps: [], t: 0, hdg: 0, gam: 0, bank: 0, prevD: Infinity };
 // Zeitraffer auf dem Weg zum Endanflug, Steilanflug und Landung in Echtzeit
-const apWarp = () => ap.phase === 'nav' ? 3 : ap.phase === 'final' && P.pos.z > 3600 ? 2 : 1;
+const apWarp = () => ap.phase === 'nav' ? 3 : ap.phase === 'final' && P.pos.z > (ap.car ? ap.car.zT + 2500 : 3600) ? 2 : 1;
+// Trägeranflug: Gleitweg 3.5° von Süden auf den Aufsetzpunkt im hinteren Deckteil, kein Abfangen
+const CAR_GS = Math.tan(3.5 * DEG);
+const carAlt = z => ap.car.yT + Math.max(0, z - ap.car.zT) * CAR_GS;
+// Langer, gerader Endanflug: erst seitlich nach Süden, dann auf die verlängerte Deckachse
+function carWaypoints() {
+  const c = ap.car, zF = c.zT + 7000; ap.wps.length = 0;
+  if (!(P.pos.z > zF + 4000 && Math.abs(P.pos.x - c.x) < (P.pos.z - zF) * .5)) ap.wps.push(new V3(c.x + (P.pos.x < c.x ? -1 : 1) * 4000, 700, zF + 6000));
+  ap.wps.push(new V3(c.x, carAlt(zF + 3000), zF + 3000));
+  ap.wps.push(new V3(c.x, carAlt(zF), zF));
+}
 
 function startAutoland() {
   if (mode !== 'fly') return;
@@ -1736,30 +1747,35 @@ function startAutoland() {
   telemetry();
   ap.hdg = Math.atan2(P.dir.x, -P.dir.z); ap.gam = Math.asin(clamp(P.dir.y, -1, 1)); ap.bank = clamp(tel.roll, -1.2, 1.2);
   ap.prevD = Infinity; ap.wps.length = 0;
+  const carrier = world === 1 && jungle.ships[0] && jungle.ships[0].alive ? jungle.ships[0] : null;
+  ap.car = carrier ? { x: carrier.pos.x, zT: carrier.pos.z + 100, yT: 20 + GH - 3 } : null;   // leicht unter das Deck zielen: Trägerlandung ohne Abfangen
   if (P.onGround) { ap.phase = 'roll'; ap.hdg = P.hdg; }
-  else {
+  else if (ap.car) {
+    ap.phase = 'nav'; P.s = Math.max(P.s, 70);
+    carWaypoints();
+  } else {
     ap.phase = 'nav'; P.s = Math.max(P.s, 70);
     const faf = apAlt(FAF_Z);
     // Von Norden oder von der Seite zuerst einen Punkt südlich des Endanflugs ansteuern
     if (!(P.pos.z > FAF_Z + 3000 && Math.abs(P.pos.x) < P.pos.z - FAF_Z)) ap.wps.push(new V3((P.pos.x < 0 ? -1 : 1) * 3500, Math.max(1000, faf + 250), FAF_Z + 5000));
     ap.wps.push(new V3(0, faf, FAF_Z));
   }
-  toast('Autopilot aktiv: Landung auf Piste 36, Basis Alpenrand');
+  toast(ap.car ? 'Autopilot aktiv: Landung auf dem eigenen Flugzeugträger' : 'Autopilot aktiv: Landung auf Piste 36');
   showUI();
 }
 
 function autoStep(dt) {
   P.thr += (P.thrCmd - P.thr) * Math.min(1, dt * 1.5);
   P.gearAnim = clamp(P.gearAnim + (P.gear ? dt : -dt) / 4, 0, 1);
-  const x = P.pos.x, z = P.pos.z, floor = Math.max(groundAt(x, z), 0) + GH;
+  const x = P.pos.x, z = P.pos.z, floor = Math.max(surfAt(x, z), 0) + GH;
 
   if (ap.phase === 'roll') {
-    P.s = Math.max(0, P.s - (P.s > 15 ? 4.5 : 2.4) * dt);
+    P.s = Math.max(0, P.s - (ap.car ? 24 : P.s > 15 ? 4.5 : 2.4) * dt);
     P.thrCmd = 0; P.brake = true;
-    if (Math.abs(ap.hdg) < .3) ap.hdg += clamp(clamp(-x * .02, -.06, .06) - ap.hdg, -.05 * dt, .05 * dt);
+    if (Math.abs(ap.hdg) < .3) ap.hdg += clamp(clamp(-(x - (ap.car ? ap.car.x : 0)) * .02, -.06, .06) - ap.hdg, -.05 * dt, .05 * dt);
     P.gp = Math.max(0, P.gp - dt * .07); P.hdg = ap.hdg;
     P.pos.x += Math.sin(ap.hdg) * P.s * dt; P.pos.z -= Math.cos(ap.hdg) * P.s * dt;
-    P.pos.y = Math.max(groundAt(P.pos.x, P.pos.z), 0) + GH;
+    P.pos.y = Math.max(surfAt(P.pos.x, P.pos.z), 0) + GH;
     P.q.setFromEuler(eul.set(P.gp, -ap.hdg, 0, 'YXZ'));
     P.dir.set(Math.sin(ap.hdg), 0, -Math.cos(ap.hdg)); P.L = G0; P.aoa = 0; P.onGround = true;
     if (P.s <= 0 && P.gp <= 0) enterLanded();
@@ -1768,9 +1784,9 @@ function autoStep(dt) {
 
   if (ap.phase === 'nav') {
     const wp = ap.wps[0], d = Math.hypot(wp.x - x, wp.z - z);
-    if (d < 1400 || (d < 3500 && d > ap.prevD)) {
+    if (d < (ap.car && ap.wps.length < 3 ? 500 : 1400) || (d < 3500 && d > ap.prevD)) {
       ap.wps.shift(); ap.prevD = Infinity;
-      if (!ap.wps.length) { ap.phase = 'final'; P.gear = true; toast('Endanflug Piste 36, Fahrwerk fährt aus'); }
+      if (!ap.wps.length) { ap.phase = 'final'; P.gear = true; toast(ap.car ? 'Endanflug Träger, Fahrwerk und Fanghaken raus' : 'Endanflug Piste 36, Fahrwerk fährt aus'); }
     } else ap.prevD = d;
   }
   let hdgCmd, vsCmd, vT, bankMax;
@@ -1782,8 +1798,15 @@ function autoStep(dt) {
     const alt = Math.max(wp.y, ahead + 300, floor + 150);
     if (P.pos.y - alt > d * .2 + 400) hdgCmd = ap.hdg + 1;   // viel zu hoch: in einer Kurve absteigen
     vsCmd = clamp((alt - P.pos.y) * .12, -45, 40);
-    vT = ap.wps.length === 1 && d < 5000 ? 120 : 220; bankMax = 55 * DEG;
+    vT = ap.car && ap.wps.length <= 2 ? 140 : ap.wps.length === 1 && d < 5000 ? 120 : 220; bankMax = 55 * DEG;
     P.thrCmd = vT > 150 ? .9 : .6;
+  } else if (ap.car) {
+    hdgCmd = Math.atan2(ap.car.x - x, clamp((z - ap.car.zT) * .35, 300, 2500));   // Verfolgung eines Punkts voraus auf der Deckachse
+    P.pos.x += (ap.car.x - x) * Math.min(1, dt * .35);   // Querablage sanft ausgleichen
+    if (z < ap.car.zT - 250 && deckAt(x, z) < 0) { ap.phase = 'nav'; P.gear = false; carWaypoints(); toast('Durchstarten, neuer Anflug auf den Träger'); }
+    vsCmd = clamp((carAlt(z - P.s * 1.5) - P.pos.y) / 1.5, -20, 15);
+    vT = z > ap.car.zT + 3000 ? 110 : 70; bankMax = (z < ap.car.zT + 800 ? 6 : 30) * DEG;
+    P.thrCmd = .5;
   } else {
     const h = P.pos.y - floor;
     hdgCmd = clamp(-x * .003, -.6, .6);
@@ -1807,12 +1830,12 @@ function autoStep(dt) {
   P.L = G0 / Math.cos(ap.bank); P.onGround = false;
   P.airTime += dt; P.maxKt = Math.max(P.maxKt, P.s * KT);
 
-  const fl = Math.max(groundAt(P.pos.x, P.pos.z), 0) + GH;
+  const fl = Math.max(surfAt(P.pos.x, P.pos.z), 0) + GH;
   if (ap.phase === 'final' && P.pos.y <= fl) {
     P.pos.y = fl; P.onGround = true; P.gp = clamp(ap.gam + P.aoa, 0, 14 * DEG); P.rr = 0; P.thrCmd = 0;
     ap.phase = 'roll'; ap.bank = 0;
-    toast('Aufgesetzt, der Autopilot bremst');
-  } else if (P.pos.y < fl + 25 && (ap.phase === 'nav' || P.pos.z > 2100)) P.pos.y = fl + 25;
+    toast(ap.car && deckAt(P.pos.x, P.pos.z) > 0 ? 'Fangseil erwischt' : 'Aufgesetzt, der Autopilot bremst');
+  } else if (P.pos.y < fl + 25 && (ap.phase === 'nav' || P.pos.z > (ap.car ? ap.car.zT + 800 : 2100))) P.pos.y = fl + 25;
 }
 
 // Ausstieg: Haube auf, Pilotin klettert über den Lufteinlass, springt ab, nimmt den Helm ab und salutiert
@@ -1829,6 +1852,7 @@ const POLE_HR = new V3(-1, -.4, -.2).normalize(), POLE_HL = new V3(1, -.4, -.2).
 const egA = new V3(), egB = new V3(), egH = new V3(), egPR = new V3(), egPL = new V3(), egC = new V3(), egL = new V3();
 
 function enterLanded() {
+  $('#landedEyebrow').textContent = ap.car ? 'Mission beendet · Eigener Träger' : 'Mission beendet · Piste 36';
   mode = 'landed'; ap.phase = 'egress'; ap.t = 0; eg.shown = false;
   P.s = 0; P.thr = P.thrCmd = 0; P.brake = false;
   updateModel(0); jet.group.updateMatrixWorld(true);
@@ -2066,6 +2090,7 @@ function launchMissile(tg) {
   mesh.position.copy(pos); scene.add(mesh);
   missiles.push({ mesh, pos, prev: pos.clone(), dir: fwd.clone(), spd: P.s + 80, life: 10, tg, smoke: 0 });
   combat.msl--; combat.mslT = .6; combat.lockT = 0;
+  pipStart(missiles[missiles.length - 1], missiles, 'RAKETE');
   toast('Rakete gestartet, noch ' + combat.msl); boom(.18);
 }
 function updateMissiles(dt) {
@@ -2308,7 +2333,7 @@ function buildJungle() {
   }
   // Flotte: Flugzeugträger vor Anker, Schlachtschiffe und Zerstörer auf Kreisbahnen
   const SHIPS = [
-    { type: 'carrier', name: 'Flugzeugträger', hp: 180, pts: 600, len: 168, beam: 36, top: 20, at: [9500, -1500], r: 0 },
+    { type: 'carrier', name: 'Eigener Träger', friendly: true, hp: 180, pts: 600, len: 168, beam: 36, top: 20, at: [9500, -1500], r: 0 },
     { type: 'battle', name: 'Schlachtschiff', hp: 120, pts: 400, len: 136, beam: 17, top: 30, at: [13500, -5500], r: 2600, w: 1 },
     { type: 'battle', name: 'Schlachtschiff', hp: 120, pts: 400, len: 136, beam: 17, top: 30, at: [12500, 5500], r: 2200, w: -1 },
     { type: 'destroyer', name: 'Zerstörer', hp: 60, pts: 200, len: 63, beam: 8, top: 16, at: [8500, -9500], r: 1600, w: 1 },
@@ -2357,6 +2382,7 @@ function deckAt(x, z) {
 const surfAt = (x, z) => Math.max(groundAt(x, z), deckAt(x, z));
 function damageShip(sh, dmg, at) {
   if (!sh.alive) return;
+  if (sh.friendly) { for (let i = 0; i < 6; i++) puff(at, true, .3); if (dmg > 10) toast('Achtung, das ist der eigene Träger'); return; }
   sh.hp -= dmg; combat.hitT = .25;
   for (let i = 0; i < (dmg > 10 ? 18 : 2); i++) puff(at, true, dmg > 10 ? .8 : .25);
   if (dmg > 10) boom(.45);
@@ -2406,6 +2432,7 @@ function dropBomb() {
   mesh.position.copy(pos);
   bombs.push({ mesh, pos, prev: pos.clone(), vel, rocket: heli, life: 40, smoke: 0 });
   combat.bombs--; toast((heli ? 'Rakete abgefeuert' : 'Bombe ausgeklinkt') + ', noch ' + combat.bombs);
+  pipStart(bombs[bombs.length - 1], bombs, heli ? 'HELLFIRE' : 'BOMBE');
   if (heli) boom(.15);
 }
 // Wasserbomben werden zu Torpedos: knapp unter der Oberfläche, steuern auf das nächste Schiff voraus
@@ -2418,10 +2445,11 @@ function torpedoStep(b, dt) {
   // nächstes Schiff in einem Kegel von ±40° voraus innerhalb von 8 km
   let best = null, bd = 8000;
   if (world === 1) for (const sh of jungle.ships) {
-    if (!sh.alive) continue;
+    if (!sh.alive || sh.friendly) continue;
     const dx = sh.pos.x - b.pos.x, dz = sh.pos.z - b.pos.z, d = Math.hypot(dx, dz);
     if (d < bd && (dx * b.dir.x + dz * b.dir.z) / d > Math.cos(40 * DEG)) { bd = d; best = sh; }
   }
+  b.tgt = best;
   if (best) {
     const want = Math.atan2(best.pos.x - b.pos.x, -(best.pos.z - b.pos.z)), cur = Math.atan2(b.dir.x, -b.dir.z);
     const h = cur + clamp(wrapA(want - cur), -.5 * dt, .5 * dt);
@@ -2511,7 +2539,7 @@ function updatePortal(dt) {
       if (craft().heli) P.vel.copy(keepDir).multiplyScalar(Math.max(P.vel.length(), 30));
       camQ.copy(craft().heli ? camQ : P.q);
       portal.phase = 'out'; portal.t = 0; portal.cool = 5;
-      toast(world === 1 ? 'Willkommen an der Dschungelküste: Flotte im Osten. Blaues Loch: Alpen, violettes: Nacht' : world === 2 ? 'Nachtwelt: Lichterstadt an der Bucht. Flieg unter den Brücken durch! Blaues Loch: Alpen, grünes: Dschungelküste' : 'Alpen. Grünes Loch: Dschungelküste, violettes: Nacht');
+      toast(world === 1 ? 'Dschungelküste: eigener Träger blau, Feindflotte orange. Blaues Loch: Alpen, violettes: Nacht' : world === 2 ? 'Nachtwelt: Lichterstadt an der Bucht. Flieg unter den Brücken durch! Blaues Loch: Alpen, grünes: Dschungelküste' : 'Alpen. Grünes Loch: Dschungelküste, violettes: Nacht');
     }
   } else if (portal.phase === 'out') {
     portal.t += dt; fadeEl.style.opacity = Math.max(0, 1 - portal.t / .9);
@@ -2806,6 +2834,59 @@ function bridgeCheck(prev, pos) {
   return null;
 }
 
+// ---------- Waffenkamera: zweites Fenster folgt Rakete, Bombe oder Torpedo bis zum Einschlag
+const pipCam = new THREE.PerspectiveCamera(50, 1.6, .5, 90000);
+const pipEl = document.createElement('div');
+pipEl.style.cssText = 'position:fixed;z-index:4;pointer-events:none;border:1px solid rgba(125,255,176,.7);border-radius:3px;box-shadow:0 0 0 1px rgba(0,0,0,.5);display:none';
+const pipLab = document.createElement('div');
+pipLab.style.cssText = 'position:absolute;left:8px;top:6px;font:600 11px/1.2 "IBM Plex Mono",ui-monospace,monospace;letter-spacing:.1em;color:#7dffb0;text-shadow:0 0 3px #000';
+pipEl.appendChild(pipLab); document.body.appendChild(pipEl);
+const pip = { tgt: null, obj: null, list: null, kind: '', after: 0, last: new V3(), dir: new V3(0, 0, -1), look: new V3(), rect: null };
+function pipStart(obj, list, kind) { pip.tgt = null; pipCam.fov = 50; pip.obj = obj; pip.list = list; pip.kind = kind; pip.after = 0; pip.last.copy(obj.pos); pipCam.position.copy(obj.pos); }
+function pipStop() { pip.obj = null; pip.after = 0; pipEl.style.display = 'none'; }
+function pipRect() {
+  const w = Math.round(W < 640 ? W * .52 : Math.min(W * .3, 400)), h = Math.round(w * .62);
+  return { x: W - w - 16, y: W < 640 ? 230 : 16, w, h };   // y von unten
+}
+function pipUpdate(dt) {
+  if (!pip.obj && pip.after <= 0) return false;
+  const o = pip.obj;
+  if (o) {
+    if (pip.list.includes(o)) {
+      pip.last.copy(o.pos);
+      if (o.torp) { pip.kind = 'TORPEDO'; pip.dir.copy(o.dir); }
+      else if (o.dir) pip.dir.copy(o.dir);
+      else if (o.vel && o.vel.lengthSq() > 1) pip.dir.copy(o.vel).normalize();
+    } else { pip.obj = null; pip.after = 3.5; pip.kind += ' · EINSCHLAG'; if (pip.tgt && pip.tgt.distanceTo(pip.last) < 400) pip.last.copy(pip.tgt); }
+  } else pip.after -= dt;
+  if (!pip.obj && pip.after <= 0) { pipStop(); return false; }
+  // Kamera hinter dem Geschoss, beim Torpedo über dem Wasser; nach dem Einschlag Blick auf die Stelle
+  const back = pip.kind.startsWith('TORPEDO') ? 55 : pip.kind.startsWith('RAKETE') ? 28 : 34, up = pip.kind.startsWith('TORPEDO') ? 14 : 6;
+  const tg = pip.obj && (pip.obj.tg && pip.obj.tg.alive ? pip.obj.tg.pos : pip.obj.tgt && pip.obj.tgt.alive ? cv3.set(pip.obj.tgt.pos.x, pip.obj.tgt.top * .4, pip.obj.tgt.pos.z) : null);
+  if (tg) { pip.dir.subVectors(tg, pip.last); if (pip.kind.startsWith('TORPEDO')) pip.dir.y = 0; pip.dir.normalize(); pip.tgt = tg.clone(); }
+  if (pip.obj) {
+    cv4.copy(pip.last).addScaledVector(pip.dir, -back); cv4.y += up;
+    if (pip.kind.startsWith('TORPEDO')) cv4.y = Math.max(cv4.y, 10);
+    pipCam.position.lerp(cv4, Math.min(1, dt * 8));
+    if (tg) pip.look.lerp(tg, Math.min(1, dt * 6)); else pip.look.copy(pip.last).addScaledVector(pip.dir, 120);
+  } else { pip.look.lerp(pip.last, Math.min(1, dt * 4)); }
+  pipCam.up.set(0, 1, 0); pipCam.lookAt(pip.look);
+  // Zoom: das Ziel soll im Fenster gut sichtbar sein
+  const fd = pip.tgt ? pipCam.position.distanceTo(pip.tgt) : 300, fov = clamp(2 * Math.atan(90 / fd) / DEG, 12, 55);
+  pipCam.fov += (fov - pipCam.fov) * Math.min(1, dt * 3);
+  const r = pip.rect = pipRect();
+  pipEl.style.display = 'block'; pipEl.style.left = r.x + 'px'; pipEl.style.top = (H - r.y - r.h) + 'px'; pipEl.style.width = r.w + 'px'; pipEl.style.height = r.h + 'px';
+  pipLab.textContent = 'WAFFENKAMERA · ' + pip.kind;
+  return true;
+}
+function pipRender() {
+  const r = pip.rect; if (!r) return;
+  pipCam.aspect = r.w / r.h; pipCam.updateProjectionMatrix();
+  renderer.setScissorTest(true); renderer.setViewport(r.x, r.y, r.w, r.h); renderer.setScissor(r.x, r.y, r.w, r.h);
+  renderer.render(scene, pipCam);
+  renderer.setScissorTest(false); renderer.setViewport(0, 0, W, H);
+}
+
 // ---------- Pegasus (geheim, Shift+P): geflügeltes Pferd, Nase nach −z, Hufe auf Bodenhöhe −gh
 function buildPegasus() {
   const g = new THREE.Group(), add = kit(g);
@@ -2914,7 +2995,7 @@ function pegTarget() {
     bd = d; best = { ref, ship, pos };
   };
   for (const t of targets) if (t.alive) look(t.pos, t, false);
-  if (world === 1) for (const sh of jungle.ships) if (sh.alive) look(new V3(sh.pos.x, sh.top * .5, sh.pos.z), sh, true);
+  if (world === 1) for (const sh of jungle.ships) if (sh.alive && !sh.friendly) look(new V3(sh.pos.x, sh.top * .5, sh.pos.z), sh, true);
   return best;
 }
 function spitFire() {
@@ -3129,7 +3210,8 @@ function drawHUD() {
   if (world === 1) for (const sh of jungle.ships) {
     if (!sh.alive) continue;
     const d = sh.pos.distanceTo(P.pos); if (d > 16000 || d < 500) continue;
-    mark(cv4.copy(sh.pos).setY(sh.top * .6), '#ffb648', sh.name.toUpperCase() + ' ' + (d / 1000).toFixed(1) + ' · ' + Math.max(0, Math.round(sh.hp / sh.maxHp * 100)) + '%', clamp(9000 / d, 12, 40));
+    if (sh.friendly) mark(cv4.copy(sh.pos).setY(sh.top * .6), '#6fd2ff', '◆ EIGENER TRÄGER ' + (d / 1000).toFixed(1) + ' · SHIFT+L LANDET', clamp(9000 / d, 12, 40));
+    else mark(cv4.copy(sh.pos).setY(sh.top * .6), '#ffb648', sh.name.toUpperCase() + ' ' + (d / 1000).toFixed(1) + ' · ' + Math.max(0, Math.round(sh.hp / sh.maxHp * 100)) + '%', clamp(9000 / d, 12, 40));
   }
   for (const b of portalsHere()) { const d = b.pos.distanceTo(P.pos); if (d < 20000 && d > BH_R * 1.6) mark(b.pos, b.tint || '#c9a2ff', 'LOCH → ' + WORLD_NAMES[b.to].toUpperCase() + ' ' + (d / 1000).toFixed(1), clamp(60000 / d, 14, 60)); }
   if (craft().bombs && combat.bombs > 0 && !craft().heli && !P.onGround) {
@@ -3216,7 +3298,7 @@ function drawHUD() {
     wy += 32;
   }
   if (mode === 'auto') {
-    const txt = 'AUTOPILOT · ' + (ap.phase === 'nav' ? 'KURS PISTE 36' : ap.phase === 'final' ? 'ENDANFLUG 36' : 'AUSROLLEN') + (apWarp() > 1 ? ' · ' + apWarp() + '×' : '');
+    const txt = 'AUTOPILOT · ' + (ap.phase === 'nav' ? (ap.car ? 'KURS TRÄGER' : 'KURS PISTE 36') : ap.phase === 'final' ? (ap.car ? 'ENDANFLUG TRÄGER' : 'ENDANFLUG 36') : ap.car ? 'FANGSEIL' : 'AUSROLLEN') + (apWarp() > 1 ? ' · ' + apWarp() + '×' : '');
     c.font = '600 ' + (small ? 15 : 18) + 'px "IBM Plex Mono", ui-monospace, monospace'; c.textAlign = 'center';
     const tw = c.measureText(txt).width + 22;
     c.strokeStyle = c.fillStyle = HUD_C;
@@ -3255,8 +3337,8 @@ function drawRadar(c, small) {
   // Schiffe und schwarzes Loch
   if (world === 1) for (const sh of jungle.ships) {
     if (!sh.alive) continue;
-    const e = edge(toScreen(sh.pos.x, sh.pos.z), R - 4); c.fillStyle = e[2] ? 'rgba(255,182,72,.5)' : '#ffb648';
-    c.save(); c.translate(ox + e[0], oy + e[1]); c.rotate(sh.hdg - h); c.fillRect(-2, -5, 4, 10); c.restore();
+    const e = edge(toScreen(sh.pos.x, sh.pos.z), R - 4); c.fillStyle = sh.friendly ? (e[2] ? 'rgba(111,210,255,.55)' : '#6fd2ff') : e[2] ? 'rgba(255,182,72,.5)' : '#ffb648';
+    c.save(); c.translate(ox + e[0], oy + e[1]); c.rotate(sh.hdg - h); if (sh.friendly) { c.fillRect(-3, -6, 6, 12); c.strokeStyle = '#fff'; c.lineWidth = 1; c.strokeRect(-3, -6, 6, 12); } else c.fillRect(-2, -5, 4, 10); c.restore();
   }
   for (const b of portalsHere()) { const e = edge(toScreen(b.pos.x, b.pos.z), R - 5); c.strokeStyle = b.tint || '#c9a2ff'; c.lineWidth = 2; c.beginPath(); c.arc(ox + e[0], oy + e[1], e[2] ? 3 : 5, 0, Math.PI * 2); c.stroke(); c.lineWidth = 1.2; }
   // Münzen
@@ -3463,7 +3545,7 @@ document.querySelectorAll('#scens button').forEach(b => b.addEventListener('clic
 lvlEl.addEventListener('input', () => { level = clamp(+lvlEl.value | 0, 1, 3); try { localStorage.setItem('f35level', level); } catch (e) {} showCraft(); });
 lvlEl.addEventListener('change', () => lvlEl.blur());
 showCraft();
-window.__f35 = { night, get fireballs() { return fireballs; }, selectScen, setWorld, jungle, bombs, BH, portal, dropBomb, get world() { return world; }, selectCraft, groundAt, P, tel, combat, targets, missiles, sim(n, dt) { for (let i = 0; i < n; i++) { if (mode === 'fly') { step(dt); if (mode === 'fly') { updateCombat(dt); updateBombs(dt); updateFireballs(dt); } } updateShips(dt); updateNight(dt); updatePortal(dt); } telemetry(); return mode; } };
+window.__f35 = { pip, autoSim(n, dt) { for (let i = 0; i < n; i++) { if (mode === 'auto') { const k = apWarp(); for (let j = 0; j < k && mode === 'auto'; j++) autoStep(dt); } else if (mode === 'landed') egressUpdate(dt); updateShips(dt); } return mode; }, get ap() { return ap; }, night, get fireballs() { return fireballs; }, selectScen, setWorld, jungle, bombs, BH, portal, dropBomb, get world() { return world; }, selectCraft, groundAt, P, tel, combat, targets, missiles, sim(n, dt) { for (let i = 0; i < n; i++) { if (mode === 'fly') { step(dt); if (mode === 'fly') { updateCombat(dt); updateBombs(dt); updateFireballs(dt); } } updateShips(dt); updateNight(dt); updatePortal(dt); } telemetry(); return mode; } };
 tap('#goRwy', () => begin(false)); tap('#goAir', () => begin(true)); tap('#goResume', resume);
 tap('#reRwy', () => begin(false)); tap('#reAir', () => begin(true));
 tap('#laRwy', () => begin(false)); tap('#laAir', () => begin(true));
@@ -3522,6 +3604,7 @@ function frame(now) {
   updateAudio();
   if (isTouch) $('#thrFill').style.height = (clamp(P.thrCmd / 1.1, 0, 1) * 100) + '%';
   renderer.render(scene, camera);
+  if (pipUpdate(dt)) pipRender();
   drawHUD();
 }
 
