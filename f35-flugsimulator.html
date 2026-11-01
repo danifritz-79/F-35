@@ -103,6 +103,7 @@ kbd{font:600 11px/1 var(--f-mono);color:var(--ink);border:1px solid rgba(230,239
 <canvas id="hud" aria-hidden="true"></canvas>
 
 <nav id="bar" aria-label="Bedienung">
+  <button id="bView" type="button" aria-pressed="false">Cockpit<kbd>K</kbd></button>
   <button id="bCam" type="button">Kamera<kbd>C</kbd></button>
   <button id="bGear" type="button">Fahrwerk<kbd>G</kbd></button>
   <button id="bBrake" type="button">Bremse<kbd>B</kbd></button>
@@ -142,6 +143,7 @@ kbd{font:600 11px/1 var(--f-mono);color:var(--ink);border:1px solid rgba(230,239
       <div id="kGear"><span>Fahrwerk</span><span><kbd>G</kbd></span></div>
       <div id="kBrake"><span>Bremse (halten)</span><span><kbd>B</kbd></span></div>
       <div><span id="kYaw">Seitenruder</span><span><kbd>Q</kbd><kbd>E</kbd></span></div>
+      <div><span>Cockpit / Aussensicht</span><span><kbd>K</kbd></span></div>
       <div><span>Kamera wechseln</span><span><kbd>C</kbd></span></div>
       <div><span>Höhensteuer umkehren</span><span><kbd>I</kbd></span></div>
       <div><span>Munition auffüllen</span><span><kbd>⇧M</kbd><kbd>N</kbd></span></div>
@@ -305,6 +307,22 @@ const scene = new THREE.Scene();
 const SKY_HOR = '#b4cbdc';
 scene.fog = new THREE.Fog(new THREE.Color(SKY_HOR), 4000, 36000);
 const camera = new THREE.PerspectiveCamera(62, 1, .3, 90000);
+scene.add(camera);
+const cockpitRig = (() => {
+  const g = new THREE.Group(); g.visible = false; camera.add(g);
+  const dark = new THREE.MeshBasicMaterial({ color: 0x15181b }), frame = new THREE.MeshBasicMaterial({ color: 0x0c0e10 });
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(1.7, .4, .08), dark); panel.position.set(0, -.58, -.85); panel.rotation.x = -.45; g.add(panel);
+  const shield = new THREE.Mesh(new THREE.BoxGeometry(1.8, .025, .22), frame); shield.position.set(0, -.4, -.8); g.add(shield);
+  const scr = (draw) => { const cv = document.createElement('canvas'); cv.width = 256; cv.height = 192; const c = cv.getContext('2d'); c.fillStyle = '#04110a'; c.fillRect(0, 0, 256, 192); c.strokeStyle = c.fillStyle = '#5cff9c'; c.lineWidth = 3; draw(c); const t = new THREE.CanvasTexture(cv); t.encoding = THREE.sRGBEncoding; return new THREE.MeshBasicMaterial({ map: t }); };
+  const radar = scr(c => { for (const r of [30, 60, 88]) { c.beginPath(); c.arc(128, 96, r, 0, Math.PI * 2); c.stroke(); } c.beginPath(); c.moveTo(128, 6); c.lineTo(128, 186); c.moveTo(38, 96); c.lineTo(218, 96); c.stroke(); c.fillStyle = '#ff5a4e'; c.fillRect(160, 50, 8, 8); c.fillRect(90, 130, 8, 8); });
+  const adi = scr(c => { c.fillStyle = '#1f4f7a'; c.fillRect(0, 0, 256, 96); c.fillStyle = '#6a4a2a'; c.fillRect(0, 96, 256, 96); c.strokeStyle = '#fff'; c.beginPath(); c.moveTo(0, 96); c.lineTo(256, 96); c.moveTo(98, 96); c.lineTo(118, 106); c.lineTo(138, 106); c.lineTo(158, 96); c.stroke(); for (const y of [56, 136]) { c.beginPath(); c.moveTo(100, y); c.lineTo(156, y); c.stroke(); } });
+  const eng = scr(c => { c.font = 'bold 26px monospace'; c.fillText('ENG  98%', 30, 60); c.fillText('FUEL 72%', 30, 110); c.fillText('HYD  OK', 30, 160); });
+  [[-.48, radar], [0, adi], [.48, eng]].forEach(([x, m]) => { const s = new THREE.Mesh(new THREE.PlaneGeometry(.3, .22), m); s.position.set(x * 1.05, -.55, -.8); s.rotation.x = -.45; g.add(s); });
+  for (const sx of [-1, 1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(.028, 1.1, .03), frame); post.position.set(sx * 1.0, .05, -.9); post.rotation.z = sx * .32; g.add(post); }
+  const bow = new THREE.Mesh(new THREE.BoxGeometry(1.5, .025, .03), frame); bow.position.set(0, .66, -.95); g.add(bow);
+  g.traverse(o => { if (o.isMesh) { o.renderOrder = 10; o.material.depthTest = false; o.material.fog = false; } });
+  return g;
+})();
 const sunDir = new V3(-.42, .58, -.48).normalize();
 
 const skyMat = new THREE.ShaderMaterial({
@@ -1285,6 +1303,7 @@ addEventListener('keydown', e => {
   switch (e.code) {
     case 'KeyG': if (mode === 'fly') toggleGear(); break;
     case 'KeyC': cycleCam(); break;
+    case 'KeyK': toggleCockpit(); break;
     case 'KeyP': if (e.shiftKey) { togglePegasus(); break; } togglePause(); break;
     case 'Escape': togglePause(); break;
     case 'KeyM': if (e.shiftKey) { refillAmmo(); break; } toggleSound(); break;
@@ -1512,7 +1531,7 @@ let orbit = { yaw: 2.4, pitch: .22, dist: 34 };
 const camNames = ['Verfolger', 'Cockpit', 'Aussen'];
 function updateCamera(dt) {
   const flying = mode === 'fly' || mode === 'auto', cockpit = flying && camMode === 1;
-  jet.canopy.visible = !cockpit; jet.pilot.visible = !cockpit && !pilotFig.root.visible;
+  jet.canopy.visible = !cockpit; cockpitRig.visible = cockpit && !craft().peg; jet.pilot.visible = !cockpit && !pilotFig.root.visible;
   if (mode === 'landed') {
     camera.fov += (48 - camera.fov) * Math.min(1, dt * 2); camera.updateProjectionMatrix();
     jet.group.updateMatrixWorld();
@@ -2883,7 +2902,9 @@ function pipRender() {
   const r = pip.rect; if (!r) return;
   pipCam.aspect = r.w / r.h; pipCam.updateProjectionMatrix();
   renderer.setScissorTest(true); renderer.setViewport(r.x, r.y, r.w, r.h); renderer.setScissor(r.x, r.y, r.w, r.h);
+  const rv = cockpitRig.visible; cockpitRig.visible = false;
   renderer.render(scene, pipCam);
+  cockpitRig.visible = rv;
   renderer.setScissorTest(false); renderer.setViewport(0, 0, W, H);
 }
 
@@ -3447,6 +3468,7 @@ function showUI() {
   $('#touch').hidden = !(isTouch && mode === 'fly');
   $('#bar').style.visibility = mode === 'fly' ? 'visible' : 'hidden';
   $('#bCam').firstChild.textContent = 'Kamera: ' + camNames[camMode];
+  $('#bView').firstChild.textContent = camMode === 1 ? 'Aussensicht' : 'Cockpit'; $('#bView').setAttribute('aria-pressed', String(camMode === 1));
 }
 let scen = 0;
 try { const v = +localStorage.getItem('f35scen'); if (v === 1 || v === 2) scen = v; } catch (e) {}
@@ -3482,6 +3504,8 @@ function togglePause() {
   if (mode === 'fly') { mode = 'brief'; showUI(); }
   else if (mode === 'brief' && canResume) resume();
 }
+// Direkter Wechsel zwischen Aussensicht (Verfolger) und Cockpit
+function toggleCockpit() { camMode = camMode === 1 ? 0 : 1; showUI(); if (mode === 'fly') toast(camMode === 1 ? 'Cockpit-Sicht' : 'Aussensicht'); }
 function cycleCam() { camMode = (camMode + 1) % 3; showUI(); if (mode === 'fly') toast('Kamera: ' + camNames[camMode] + (camMode === 2 ? ', mit der Maus ziehen zum Drehen' : '')); }
 function refillAmmo() {
   if (mode !== 'fly') return toast('Nachladen geht im Flug: Shift+M oder N');
@@ -3549,7 +3573,7 @@ window.__f35 = { pip, autoSim(n, dt) { for (let i = 0; i < n; i++) { if (mode ==
 tap('#goRwy', () => begin(false)); tap('#goAir', () => begin(true)); tap('#goResume', resume);
 tap('#reRwy', () => begin(false)); tap('#reAir', () => begin(true));
 tap('#laRwy', () => begin(false)); tap('#laAir', () => begin(true));
-tap('#bCam', cycleCam); tap('#bGear', toggleGear); tap('#bSnd', toggleSound); tap('#bPause', togglePause);
+tap('#bView', toggleCockpit); tap('#bCam', cycleCam); tap('#bGear', toggleGear); tap('#bSnd', toggleSound); tap('#bPause', togglePause);
 const bb = $('#bBrake');
 bb.addEventListener('pointerdown', e => { btnBrake = true; bb.setAttribute('aria-pressed', 'true'); });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) bb.addEventListener(ev, () => { btnBrake = false; bb.setAttribute('aria-pressed', 'false'); });
